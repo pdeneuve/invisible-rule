@@ -1,0 +1,653 @@
+'use client';
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import Vapi from '@vapi-ai/web';
+import { v4 as uuidv4 } from 'uuid';
+import VoiceOrb from './VoiceOrb';
+import LeadCaptureModal from './LeadCaptureModal';
+import SafetyModal from './SafetyModal';
+import PricingScreen from './PricingScreen';
+import { VAPI_BOP_SYSTEM_PROMPT } from '@/lib/vapi-prompt';
+
+type CallState = 'idle' | 'connecting' | 'active' | 'ai-speaking' | 'user-speaking' | 'ended';
+
+interface TranscriptEntry {
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: Date;
+}
+
+const PHASE_LABELS = [
+  'Getting Started',
+  'Mapping Tolerations',
+  'Finding the Pattern',
+  'Your Strengths',
+  'Origin Story',
+  'Coding the Pattern',
+  'Your Invisible Rule',
+  'Observation Period',
+  '30-Day Strategy',
+];
+
+export default function VoiceInterface() {
+  const [callState, setCallState] = useState<CallState>('idle');
+  const [hasStarted, setHasStarted] = useState(false);
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const [currentPhaseIndex, setCurrentPhaseIndex] = useState(0);
+  const [volumeLevel, setVolumeLevel] = useState(0);
+  const [showLeadCapture, setShowLeadCapture] = useState(false);
+  const [showPricing, setShowPricing] = useState(false);
+  const [selectedTier, setSelectedTier] = useState<1 | 2 | 3 | null>(null);
+  const [showSafety, setShowSafety] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [sessionId] = useState(() => uuidv4());
+  const [callDuration, setCallDuration] = useState(0);
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const vapiRef = useRef<InstanceType<typeof Vapi> | null>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const durationRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const callStartTimeRef = useRef<number | null>(null);
+
+  // Scroll transcript to bottom
+  useEffect(() => {
+    if (transcriptRef.current) {
+      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+    }
+  }, [transcript]);
+
+  // Duration timer
+  useEffect(() => {
+    if (callState === 'active' || callState === 'ai-speaking' || callState === 'user-speaking') {
+      if (!callStartTimeRef.current) callStartTimeRef.current = Date.now();
+      durationRef.current = setInterval(() => {
+        setCallDuration(Math.floor((Date.now() - (callStartTimeRef.current || Date.now())) / 1000));
+      }, 1000);
+    } else {
+      if (durationRef.current) clearInterval(durationRef.current);
+    }
+    return () => { if (durationRef.current) clearInterval(durationRef.current); };
+  }, [callState]);
+
+  const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  // Detect phase from transcript content
+  const detectPhase = useCallback((text: string) => {
+    const lower = text.toLowerCase();
+    if (lower.includes('tolerating') || lower.includes('toleration') || lower.includes('putting up with')) {
+      setCurrentPhaseIndex(prev => Math.max(prev, 1));
+    } else if (lower.includes('repeating') || lower.includes('pattern across') || lower.includes('theme')) {
+      setCurrentPhaseIndex(prev => Math.max(prev, 2));
+    } else if (lower.includes('survived') || lower.includes('overcome') || lower.includes('what you had to become')) {
+      setCurrentPhaseIndex(prev => Math.max(prev, 3));
+    } else if (lower.includes('first house') || lower.includes('growing up') || lower.includes('childhood') || lower.includes('emotional climate')) {
+      setCurrentPhaseIndex(prev => Math.max(prev, 4));
+    } else if (lower.includes('survival signal') || lower.includes('five elements') || lower.includes('threat theme')) {
+      setCurrentPhaseIndex(prev => Math.max(prev, 5));
+    } else if (lower.includes('invisible rule') || lower.includes('when i detect') || lower.includes('how much does this land')) {
+      setCurrentPhaseIndex(prev => Math.max(prev, 6));
+    } else if (lower.includes('observation') || lower.includes('7 to 10 days') || lower.includes('notice the pattern')) {
+      setCurrentPhaseIndex(prev => Math.max(prev, 7));
+    } else if (lower.includes('counter-strategy') || lower.includes('30-day') || lower.includes('micro-action')) {
+      setCurrentPhaseIndex(prev => Math.max(prev, 8));
+    }
+  }, []);
+
+  // Check for distress signals in user speech
+  const checkDistress = useCallback((text: string) => {
+    const distressPatterns = [
+      /\b(8|9|10)\s*(?:out of|\/)\s*10/i,
+      /i(?:'m| am) (overwhelmed|in crisis|not okay|falling apart|can't breathe)/i,
+      /can(?:'t| not) (?:breathe|stop crying|do this)/i,
+    ];
+    if (distressPatterns.some(p => p.test(text))) {
+      setShowSafety(true);
+    }
+  }, []);
+
+  // Check for end-of-session trigger
+  const checkEndOfSession = useCallback((text: string) => {
+    const endPatterns = [
+      /enter your name and email/i,
+      /core insight report/i,
+      /on the screen in front of you/i,
+      /your guide will send/i,
+    ];
+    if (endPatterns.some(p => p.test(text))) {
+      setTimeout(() => {
+        const isPaid = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'paid';
+        if (isPaid) {
+          setShowPricing(true);
+        } else {
+          setShowLeadCapture(true);
+        }
+      }, 2000);
+    }
+  }, []);
+
+  const startCall = useCallback(async () => {
+    // Clear stale report data from any previous session
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('bop_report_a');
+      localStorage.removeItem('bop_lead_data');
+      sessionStorage.removeItem('bop_report_a');
+      sessionStorage.removeItem('bop_lead_data');
+    }
+
+    setHasStarted(true);
+    setErrorMessage(null);
+    setCallState('connecting');
+
+    const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
+    if (!publicKey) {
+      setErrorMessage('VAPI public key not configured. Check your environment variables.');
+      setCallState('idle');
+      setHasStarted(false);
+      return;
+    }
+
+    const vapi = new Vapi(publicKey);
+    vapiRef.current = vapi;
+
+    vapi.on('call-start', () => {
+      setCallState('active');
+      callStartTimeRef.current = Date.now();
+    });
+
+    vapi.on('call-end', () => {
+      // If the call ends before any real conversation happened, treat it as an error
+      setTranscript(prev => {
+        if (prev.length < 2) {
+          // No real conversation happened Ã¢ÂÂ call failed or ended prematurely
+          setErrorMessage('The voice session ended unexpectedly. Please check your microphone permissions and try again.');
+          setCallState('idle');
+          setHasStarted(false);
+          return prev;
+        }
+        setCallState('ended');
+        return prev;
+      });
+    });
+
+    vapi.on('speech-start', () => {
+      setCallState('ai-speaking');
+    });
+
+    vapi.on('speech-end', () => {
+      setCallState('active');
+      setVolumeLevel(0);
+    });
+
+    vapi.on('volume-level', (level: number) => {
+      setVolumeLevel(level);
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vapi.on('message', (message: any) => {
+      if (message.type === 'transcript' && message.transcriptType === 'final') {
+        const role = message.role as 'user' | 'assistant';
+        const text = (message.transcript as string) || '';
+
+        setTranscript(prev => [...prev, {
+          role,
+          text,
+          timestamp: new Date(),
+        }]);
+
+        if (role === 'assistant') {
+          detectPhase(text);
+          checkEndOfSession(text);
+        }
+        if (role === 'user') {
+          checkDistress(text);
+          setCallState('user-speaking');
+          setTimeout(() => setCallState('active'), 500);
+        }
+      }
+    });
+
+    vapi.on('error', (error: Error) => {
+      console.error('VAPI error:', error);
+      const msg = error?.message || JSON.stringify(error) || '';
+
+      // "Meeting has ended" is Daily.co's way of reporting a normal call end Ã¢ÂÂ
+      // silence-timed-out, user hung up, session finished, etc. Not a real crash.
+      const isNormalEnd =
+        msg.includes('Meeting has ended') ||
+        msg.includes('"msg":"Meeting has ended"') ||
+        msg.includes('ejected');
+
+      if (isNormalEnd) {
+        // Only treat as normal end if real conversation happened
+        setTranscript(prev => {
+          if (prev.length < 2) {
+            setErrorMessage('The voice session could not connect. Please check your microphone permissions and internet connection, then try again.');
+            setCallState('idle');
+            setHasStarted(false);
+          } else {
+            setCallState('ended');
+          }
+          return prev;
+        });
+        return;
+      }
+
+      setErrorMessage(`Call failed: ${msg}`);
+      setCallState('idle');
+      setHasStarted(false);
+    });
+
+    try {
+      // Fetch the pre-created assistant ID from our server
+      // This uses VAPI's REST API with the private key Ã¢ÂÂ far more reliable than inline config
+      const res = await fetch('/api/get-vapi-assistant');
+      const data = await res.json();
+
+      if (!res.ok || !data.assistantId) {
+        throw new Error(data.error || data.details?.message || 'Could not get VAPI assistant ID');
+      }
+
+      await vapi.start(data.assistantId);
+    } catch (err) {
+      console.error('Failed to start VAPI call:', err);
+      const msg = err instanceof Error ? err.message : JSON.stringify(err);
+      setErrorMessage(`Failed to start call: ${msg}`);
+      setCallState('idle');
+      setHasStarted(false);
+    }
+  }, [sessionId, detectPhase, checkEndOfSession, checkDistress]);
+
+  const endCall = useCallback(() => {
+    if (vapiRef.current) {
+      vapiRef.current.stop();
+    }
+    setCallState('ended');
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    if (vapiRef.current) {
+      const newMuted = !isMuted;
+      vapiRef.current.setMuted(newMuted);
+      setIsMuted(newMuted);
+    }
+  }, [isMuted]);
+
+  const handleLeadSubmit = useCallback(async (firstName: string, email: string) => {
+    const tier = selectedTier; // null means free user - will redirect to /report
+    const transcriptText = transcript
+      .map(t => `${t.role === 'user' ? 'USER' : 'GUIDE'}: ${t.text}`)
+      .join('\n\n');
+
+    const leadData = {
+      firstName,
+      email,
+      sessionId,
+      sessionTranscript: transcriptText,
+      workingHypothesis: '',
+      confirmedHypothesis: '',
+      detectedArchetype: 'Pending voice analysis',
+      tolerations: [],
+      patternData: {
+        threatThemes: [],
+        emotionalSignals: [],
+        adaptationMoves: [],
+        protectedNeeds: [],
+        coreBeliefs: [],
+        memoryWeights: [],
+      },
+      completedAt: new Date().toISOString(),
+    };
+
+    // Submit lead to webhook
+    await fetch('/api/submit-lead', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(leadData),
+    });
+
+    // Generate Version A report from transcript
+    const sessionStateForReport = {
+      phase: 'REPORT' as const,
+      phaseProgress: 100,
+      overallProgress: 100,
+      messages: transcript.map(t => ({
+        id: uuidv4(),
+        role: t.role,
+        content: t.text,
+        timestamp: t.timestamp,
+      })),
+      tolerations: [],
+      repeatingThemes: [],
+      firstHouseMemories: [],
+      patternData: leadData.patternData,
+      workingHypothesis: '',
+      confirmedHypothesis: '',
+      detectedArchetype: null,
+      confidenceScore: 0,
+      observationLogs: [],
+      leadCaptured: true,
+      leadData,
+      safetyTriggered: false,
+      sessionId,
+    };
+
+    let report: Record<string, string> | null = null;
+    try {
+      const reportRes = await fetch('/api/generate-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionState: sessionStateForReport, version: tier === 3 ? 'B' : 'A', tier }),
+      });
+      if (!reportRes.ok) throw new Error(`Report generation failed: ${reportRes.status}`);
+      const json = await reportRes.json();
+      report = json.report ?? null;
+    } catch (err) {
+      console.error('Report generation error:', err);
+    }
+
+    // Store session data FIRST so it's available when user returns from GHL
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bop_report_a', JSON.stringify(report));
+      localStorage.setItem('bop_lead_data', JSON.stringify(leadData));
+      localStorage.setItem('bop_tier', String(tier));
+    }
+
+    // Send email BEFORE redirecting Ã¢ÂÂ await it so page navigation doesn't cancel the request
+    if (report) {
+      try {
+        await fetch('/api/send-report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ firstName, email, report, tier }),
+        });
+      } catch (err) {
+        console.warn('Email send failed:', err);
+        // Don't block redirect if email fails
+      }
+    }
+
+    // Now redirect to GHL (or directly to report if GHL URLs not set yet)
+    if (typeof window !== 'undefined') {
+      if (tier === null) {
+        // Free user - go directly to report, no paywall
+        window.location.href = '/report';
+      } else {
+        const GHL_URLS: Record<number, string> = {
+          1: process.env.NEXT_PUBLIC_GHL_URL_TIER1 || '/processing?tier=1',
+          2: process.env.NEXT_PUBLIC_GHL_URL_TIER2 || '/processing?tier=2',
+          3: process.env.NEXT_PUBLIC_GHL_URL_TIER3 || '/processing?tier=3',
+        };
+        window.location.href = GHL_URLS[tier] || '/report';
+      }
+    }
+  }, [transcript, sessionId, selectedTier]);
+
+  const overallProgress = Math.round((currentPhaseIndex / (PHASE_LABELS.length - 1)) * 100);
+
+  // Ã¢ÂÂÃ¢ÂÂ LANDING SCREEN Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+  if (!hasStarted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 flex items-center justify-center px-4">
+        <div className="max-w-xl w-full text-center">
+          {/* Logo orb */}
+          <div className="relative inline-flex items-center justify-center mb-10">
+            <div className="w-24 h-24 rounded-full flex items-center justify-center"
+              style={{
+                background: 'radial-gradient(circle at 40% 40%, #fbbf24, #d97706, #92400e)',
+                boxShadow: '0 0 60px rgba(245, 158, 11, 0.3)',
+              }}
+            >
+              <svg className="w-10 h-10 text-white/90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                />
+              </svg>
+            </div>
+          </div>
+
+          <h1 className="text-4xl font-light text-white mb-3 tracking-tight">
+            The Invisible Rule
+          </h1>
+          <p className="text-xl text-slate-400 mb-2">
+            Your unconscious operating system {'\u2014'} made visible.
+          </p>
+          <p className="text-slate-500 mb-10 leading-relaxed max-w-md mx-auto">
+            A guided voice conversation to find the survival strategy formed in childhood that now runs your adult life on autopilot.
+          </p>
+
+          <div className="bg-slate-800/60 border border-slate-700/50 backdrop-blur-sm rounded-2xl p-8 mb-8 text-left">
+            <h3 className="text-white font-medium mb-5 text-sm uppercase tracking-widest text-center">What to expect</h3>
+            <ul className="space-y-4">
+              {[
+                ['\uD83C\uDFA4\uFE0F', 'A guided voice conversation \u2014 one question at a time'],
+                ['\u23F1\uFE0F', '45\u201375 minutes to complete the full process'],
+                ['\uD83D\uDCC4', 'A free Core Insight Report delivered after the session'],
+                ['\uD83D\uDD12', 'Private, confidential, and judgment-free'],
+              ].map(([icon, text]) => (
+                <li key={text} className="flex items-start gap-3 text-slate-300">
+                  <span className="text-lg leading-none mt-0.5">{icon}</span>
+                  <span>{text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {errorMessage && (
+            <div className="mb-4 bg-red-900/30 border border-red-700/50 rounded-xl p-4 text-red-300 text-sm text-left">
+              <p className="font-medium mb-1">Ã¢ÂÂ  Error</p>
+              <p>{errorMessage}</p>
+            </div>
+          )}
+
+          <button
+            onClick={startCall}
+            className="w-full py-5 px-8 rounded-2xl text-slate-900 font-semibold text-lg transition-all duration-300 hover:scale-105 active:scale-95"
+            style={{
+              background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
+              boxShadow: '0 8px 32px rgba(245, 158, 11, 0.3)',
+            }}
+          >
+            Begin Voice Session
+          </button>
+
+          <p className="text-slate-600 text-xs mt-5 leading-relaxed">
+            Make sure your microphone is enabled. This is pattern-mapping work, not therapy.<br />
+            If you are in crisis, please contact a mental health professional.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Ã¢ÂÂÃ¢ÂÂ ACTIVE CALL SCREEN Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+  return (
+    <div className="min-h-screen bg-slate-950 flex flex-col">
+
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/60">
+        <div className="flex items-center gap-3">
+          <div className="w-7 h-7 rounded-full flex items-center justify-center"
+            style={{ background: 'radial-gradient(circle, #fbbf24, #d97706)' }}
+          >
+            <span className="text-slate-900 text-xs font-bold">IR</span>
+          </div>
+          <span className="text-white/80 font-medium text-sm">The Invisible Rule</span>
+        </div>
+
+        <div className="flex items-center gap-4">
+          {callState !== 'idle' && callState !== 'connecting' && (
+            <span className="text-slate-500 text-sm font-mono">{formatDuration(callDuration)}</span>
+          )}
+          <div className="text-right">
+            <div className="text-slate-500 text-xs mb-1">{PHASE_LABELS[currentPhaseIndex]}</div>
+            <div className="w-28 bg-slate-800 rounded-full h-1">
+              <div
+                className="bg-amber-500 h-1 rounded-full transition-all duration-700"
+                style={{ width: `${overallProgress}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main area */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+
+        {/* Orb */}
+        <VoiceOrb state={callState} volumeLevel={volumeLevel} />
+
+        {/* Status text */}
+        <div className="mt-8 text-center">
+          {callState === 'connecting' && (
+            <p className="text-slate-400 text-lg animate-pulse">Connecting...</p>
+          )}
+          {callState === 'active' && (
+            <p className="text-slate-500 text-base">Listening...</p>
+          )}
+          {callState === 'ai-speaking' && (
+            <p className="text-amber-400/80 text-base">Speaking</p>
+          )}
+          {callState === 'user-speaking' && (
+            <p className="text-blue-400/80 text-base">I&apos;m listening</p>
+          )}
+          {callState === 'ended' && (
+            <div className="text-center">
+              <p className="text-white text-lg mb-2">Session complete</p>
+              <p className="text-slate-400 text-sm">Your report is being prepared</p>
+            </div>
+          )}
+        </div>
+
+        {/* Live transcript preview */}
+        {showTranscript && transcript.length > 0 && (
+          <div
+            ref={transcriptRef}
+            className="mt-8 w-full max-w-lg h-48 overflow-y-auto bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-2"
+          >
+            {transcript.map((entry, i) => (
+              <div key={i} className={`text-sm ${entry.role === 'user' ? 'text-slate-300 text-right' : 'text-slate-400 text-left'}`}>
+                <span className={`inline-block px-3 py-1.5 rounded-xl max-w-[85%] ${
+                  entry.role === 'user' ? 'bg-slate-700' : 'bg-slate-800'
+                }`}>
+                  {entry.text}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
+      {callState !== 'idle' && callState !== 'ended' && (
+        <div className="pb-12 flex items-center justify-center gap-6">
+          {/* Toggle transcript */}
+          <button
+            onClick={() => setShowTranscript(v => !v)}
+            className="w-12 h-12 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center transition-colors"
+            title="Toggle transcript"
+          >
+            <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+          </button>
+
+          {/* Mute */}
+          <button
+            onClick={toggleMute}
+            className={`w-14 h-14 rounded-full border flex items-center justify-center transition-all ${
+              isMuted
+                ? 'bg-red-900/40 border-red-700 hover:bg-red-900/60'
+                : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
+            }`}
+            title={isMuted ? 'Unmute' : 'Mute'}
+          >
+            {isMuted ? (
+              <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                />
+              </svg>
+            )}
+          </button>
+
+          {/* End call */}
+          <button
+            onClick={endCall}
+            className="w-14 h-14 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+            title="End session"
+          >
+            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Ended state CTA Ã¢ÂÂ show pricing after short delay */}
+      {callState === 'ended' && !showPricing && !showLeadCapture && (
+        <div className="pb-12 flex flex-col items-center gap-4">
+          <button
+            onClick={() => {
+              const isPaid = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'paid';
+              if (isPaid) {
+                setShowPricing(true);
+              } else {
+                setShowLeadCapture(true);
+              }
+            }}
+            className="px-8 py-4 rounded-xl font-semibold text-slate-900 transition-all hover:scale-105 active:scale-95"
+            style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', boxShadow: '0 8px 32px rgba(245,158,11,0.3)' }}
+          >
+            Get Your Report
+          </button>
+          <button
+            onClick={() => window.location.reload()}
+            className="text-slate-500 hover:text-slate-400 text-sm transition-colors"
+          >
+            Start a new session
+          </button>
+        </div>
+      )}
+
+      {showLeadCapture && (
+        <LeadCaptureModal
+          onSubmit={handleLeadSubmit}
+          onClose={() => setShowLeadCapture(false)}
+          tier={selectedTier ?? undefined}
+        />
+      )}
+
+
+      {showSafety && (
+        <SafetyModal onClose={() => setShowSafety(false)} />
+      )}
+
+      {/* Pricing screen Ã¢ÂÂ full page takeover after session ends */}
+      {showPricing && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <PricingScreen
+            onSelectTier={(tier) => {
+              setSelectedTier(tier);
+              setShowPricing(false);
+              setShowLeadCapture(true);
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
