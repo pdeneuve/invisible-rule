@@ -1,0 +1,326 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { put } from '@vercel/blob';
+import { VIDEO_NARRATION_PROMPT } from '@/lib/deep-dive-prompts';
+
+export const maxDuration = 300;
+
+const PAMELA_VOICE_ID = 'ZPJulgnHgp8y0rGE6kJ4';
+const VOICE_MODEL = 'eleven_multilingual_v2';
+const VOICE_SETTINGS = {
+  stability: 0.55,
+  similarity_boost: 0.85,
+  style: 0.4,
+  use_speaker_boost: true,
+};
+
+const BACKGROUND_MUSIC_URL =
+  'https://cdn.pixabay.com/download/audio/2022/06/03/audio_c3d218496a.mp3?filename=music_for_videos-inspiring-emotional-uplifting-piano-112623.mp3';
+
+const SCENE_LABELS = [
+  'Your Invisible Rule',
+  'Where It Began',
+  'What It Protected',
+  'The Cost Today',
+  'Your Archetype',
+  'The Evolved Principle',
+  'Your 30-Day Plan',
+  'Your New Beginning',
+];
+
+const SCENE_BACKGROUNDS = [
+  'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1280&h=720&fit=crop',
+  'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1280&h=720&fit=crop',
+  'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1280&h=720&fit=crop',
+  'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1280&h=720&fit=crop',
+  'https://images.unsplash.com/photo-1433086966358-54859d0ed716?w=1280&h=720&fit=crop',
+  'https://images.unsplash.com/photo-1501854140801-50d01698950b?w=1280&h=720&fit=crop',
+  'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=1280&h=720&fit=crop',
+  'https://images.unsplash.com/photo-1505765050516-f72dcac9c60e?w=1280&h=720&fit=crop',
+];
+
+// ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Audio upload ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
+
+async function uploadAudioToBlob(audioBuffer: Buffer, filename: string): Promise<string> {
+  // Simplest possible @vercel/blob SDK call for public URL
+  const blob = await put('video-audio/' + filename, audioBuffer, { access: 'public' });
+  console.log('  Uploaded (public):', blob.url);
+  return blob.url;
+}
+
+// ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ ElevenLabs TTS ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
+
+async function generateVoiceClip(text: string, apiKey: string): Promise<Buffer> {
+  const response = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${PAMELA_VOICE_ID}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey },
+      body: JSON.stringify({ text, model_id: VOICE_MODEL, voice_settings: VOICE_SETTINGS }),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`ElevenLabs TTS failed: ${response.status} ${await response.text()}`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+// ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Narration ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
+
+function getReportField(report: any, camelCase: string, snakeCase: string): string {
+  return report[camelCase] || report[snakeCase] || '';
+}
+
+function buildNarrationPrompt(report: any, firstName: string): string {
+  const bop = getReportField(report, 'bopStatement', 'bop_statement');
+  const origin = getReportField(report, 'originContext', 'origin_context');
+  const protect = getReportField(report, 'whatItProtected', 'what_it_protected');
+  const cost = getReportField(report, 'costToday', 'cost_today');
+  const archetype = getReportField(report, 'archetypeAnalysis', 'archetype_analysis');
+  const evolved = getReportField(report, 'evolvedPrinciple', 'evolved_principle');
+  const plan = getReportField(report, 'thirtyDayPlan', 'thirty_day_plan');
+
+  // Try the imported prompt first
+  if (VIDEO_NARRATION_PROMPT) {
+    try {
+      if (typeof VIDEO_NARRATION_PROMPT === 'function') {
+        return VIDEO_NARRATION_PROMPT({
+          firstName, bopStatement: bop, originContext: origin,
+          whatItProtected: protect, costToday: cost,
+          archetypeAnalysis: archetype, evolvedPrinciple: evolved, thirtyDayPlan: plan,
+        });
+      }
+      if (typeof VIDEO_NARRATION_PROMPT === 'string') {
+        return VIDEO_NARRATION_PROMPT
+          .replace('{firstName}', firstName)
+          .replace('{bopStatement}', bop)
+          .replace('{originContext}', origin)
+          .replace('{whatItProtected}', protect)
+          .replace('{costToday}', cost)
+          .replace('{archetypeAnalysis}', archetype)
+          .replace('{evolvedPrinciple}', evolved)
+          .replace('{thirtyDayPlan}', plan);
+      }
+    } catch (e) {
+      console.log('VIDEO_NARRATION_PROMPT error, using inline prompt:', e);
+    }
+  }
+
+  // Inline fallback prompt
+  return `You are writing narration for a personal development video called "The Deep Dive" for ${firstName}. Write exactly 8 narration segments, one per scene. Each should be 2-3 sentences, warm and empathetic, spoken directly to ${firstName}. Use present tense.
+
+Output format - prefix each with "SEGMENT 1:", "SEGMENT 2:", etc.
+
+Scene 1 - Your Invisible Rule: ${bop}
+Scene 2 - Where It Began: ${origin}
+Scene 3 - What It Protected: ${protect}
+Scene 4 - The Cost Today: ${cost}
+Scene 5 - Your Archetype: ${archetype}
+Scene 6 - The Evolved Principle: ${evolved}
+Scene 7 - Your 30-Day Plan: ${plan}
+Scene 8 - Your New Beginning: Write a hopeful closing that encourages ${firstName} to embrace their journey beyond this invisible rule.
+
+Write the narration now:`;
+}
+
+async function generateNarrationScript(
+  report: any, firstName: string, apiKey: string
+): Promise<string[]> {
+  const prompt = buildNarrationPrompt(report, firstName);
+
+  // Try models in order of preference
+  const models = ['claude-sonnet-4-5-20250514', 'claude-3-5-sonnet-20241022', 'claude-sonnet-4-6'];
+  let response: Response | null = null;
+
+  for (const model of models) {
+    console.log(`  Trying model: ${model}`);
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    if (response.ok) {
+      console.log(`  Using model: ${model}`);
+      break;
+    }
+    const errText = await response.text();
+    if (errText.includes('not_found') && models.indexOf(model) < models.length - 1) {
+      console.log(`  Model ${model} not found, trying next...`);
+      continue;
+    }
+    throw new Error(`Claude API failed: ${response.status} ${errText}`);
+  }
+
+  if (!response || !response.ok) {
+    throw new Error('All Claude models failed');
+  }
+
+  const data = await response.json();
+  const content = data.content?.[0]?.text || '';
+
+  // Parse segments
+  const segments = content
+    .split(/\n*(?:SEGMENT\s*\d+|SCENE\s*\d+|---+|\d+\.)\s*[:\-]?\s*\n*/i)
+    .map((s: string) => s.trim())
+    .filter((s: string) => s.length > 10);
+
+  if (segments.length === 8) return segments;
+
+  console.log(`Claude returned ${segments.length} segments, falling back to report data`);
+  return generateFallbackNarration(report, firstName);
+}
+
+function generateFallbackNarration(report: any, firstName: string): string[] {
+  return [
+    `${firstName}, welcome to your Deep Dive. Today we uncover the invisible rule that has been quietly shaping your life.`,
+    getReportField(report, 'bopStatement', 'bop_statement') || 'Your invisible rule has been operating beneath the surface, influencing every decision you make.',
+    getReportField(report, 'originContext', 'origin_context') || 'This pattern began early in your life, formed during a moment when you needed protection.',
+    getReportField(report, 'whatItProtected', 'what_it_protected') || 'At the time, this rule served an important purpose. It kept you safe when you needed it most.',
+    getReportField(report, 'costToday', 'cost_today') || 'But what once protected you is now holding you back, creating limitations you may not even see.',
+    getReportField(report, 'archetypeAnalysis', 'archetype_analysis') || 'Understanding your archetype reveals the deeper pattern at work in your life.',
+    getReportField(report, 'evolvedPrinciple', 'evolved_principle') || 'The evolved principle transforms your old rule into a source of strength and freedom.',
+    getReportField(report, 'thirtyDayPlan', 'thirty_day_plan') || 'Your thirty-day plan gives you concrete steps to begin living beyond your invisible rule.',
+  ];
+}
+
+// ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Creatomate ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
+
+function buildCreatomateTemplate(
+  narrationSegments: string[], audioUrls: string[], firstName: string
+) {
+  const sceneElements = narrationSegments.map((_, index) => ({
+    type: 'composition',
+    track: 1,
+    time: index * 37,
+    duration: 37,
+    elements: [
+      {
+        type: 'image',
+        source: SCENE_BACKGROUNDS[index] || SCENE_BACKGROUNDS[0],
+        width: '100%', height: '100%',
+      },
+      {
+        type: 'shape',
+        shape: 'rectangle',
+        width: '100%', height: '100%',
+        fill_color: 'rgba(0,0,0,0.4)',
+      },
+      {
+        type: 'text',
+        text: SCENE_LABELS[index] || `Scene ${index + 1}`,
+        font_family: 'Montserrat', font_weight: 700, font_size: '5.5 vmin',
+        fill_color: '#FFFFFF',
+        stroke_color: 'rgba(0,0,0,0.5)', stroke_width: '1.5 vmin',
+        x: '50%', y: '15%', width: '80%',
+        x_alignment: '50%', y_alignment: '50%',
+      },
+      {
+        type: 'text',
+        text: narrationSegments[index].length > 200
+          ? narrationSegments[index].substring(0, 200) + '...'
+          : narrationSegments[index],
+        font_family: 'Open Sans', font_weight: 400, font_size: '3.5 vmin',
+        fill_color: '#FFFFFF',
+        stroke_color: 'rgba(0,0,0,0.5)', stroke_width: '1.5 vmin',
+        x: '50%', y: '55%', width: '75%',
+        x_alignment: '50%', y_alignment: '50%',
+        line_height: '160%',
+      },
+      {
+        type: 'audio',
+        source: audioUrls[index],
+        volume: '100%',
+      },
+    ],
+  }));
+
+  return {
+    output_format: 'mp4',
+    width: 1280, height: 720,
+    duration: 300,
+    elements: [
+      { type: 'audio', source: BACKGROUND_MUSIC_URL, volume: '5%', animations: [{ time: 'end', duration: 3, type: 'fade' }] },
+      ...sceneElements,
+    ],
+  };
+}
+
+async function submitToCreatomate(template: any, apiKey: string) {
+  const response = await fetch('https://api.creatomate.com/v1/renders', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ source: template }),
+  });
+  if (!response.ok) {
+    throw new Error(`Creatomate API failed: ${response.status} ${await response.text()}`);
+  }
+  const result = await response.json();
+  return Array.isArray(result) ? result[0] : result;
+}
+
+// ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ POST handler ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { report, firstName } = body;
+
+    const CREATOMATE_API_KEY = process.env.CREATOMATE_API_KEY;
+    const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+
+    if (!CREATOMATE_API_KEY || !ANTHROPIC_API_KEY || !ELEVENLABS_API_KEY) {
+      return NextResponse.json({ error: 'Missing required API keys' }, { status: 400 });
+    }
+    if (!report) {
+      return NextResponse.json({ error: 'Missing required data' }, { status: 400 });
+    }
+
+    const name = firstName || 'Friend';
+
+    console.log('Step 1: Generating narration script via Claude...');
+    const narrationSegments = await generateNarrationScript(report, name, ANTHROPIC_API_KEY);
+    console.log(`Generated ${narrationSegments.length} narration segments`);
+
+    console.log('Step 2: Generating voice clips via ElevenLabs...');
+    const audioBuffers: Buffer[] = [];
+    for (let i = 0; i < narrationSegments.length; i++) {
+      console.log(`  Generating clip ${i + 1}/${narrationSegments.length}...`);
+      audioBuffers.push(await generateVoiceClip(narrationSegments[i], ELEVENLABS_API_KEY));
+    }
+
+    console.log('Step 3: Uploading audio to storage...');
+    const timestamp = Date.now();
+    const audioUrls: string[] = [];
+    for (let i = 0; i < audioBuffers.length; i++) {
+      const filename = `narration-${timestamp}-${i + 1}.mp3`;
+      audioUrls.push(await uploadAudioToBlob(audioBuffers[i], filename));
+    }
+
+    console.log('Step 4: Building Creatomate template...');
+    const template = buildCreatomateTemplate(narrationSegments, audioUrls, name);
+
+    console.log('Step 5: Submitting to Creatomate...');
+    const render = await submitToCreatomate(template, CREATOMATE_API_KEY);
+    console.log('Render submitted:', JSON.stringify(render));
+
+    return NextResponse.json({ renderId: render.id, ...render });
+  } catch (error: any) {
+    console.error('Video generation error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to generate video' },
+      { status: 500 }
+    );
+  }
+}
