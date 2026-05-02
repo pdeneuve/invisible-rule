@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 
-// ââ Version A â The Blueprint (8 sections) âââââââââââââââââââââââââââââââââââ
+// ââ Version A — The Blueprint (8 sections) âââââââââââââââââââââââââââââââââââ
 const VERSION_A_SECTIONS = [
   { title: 'Your Tolerations', key: 'tolerationsSummary' },
   { title: 'Repeating Themes', key: 'repeatingThemesSummary' },
@@ -13,7 +13,7 @@ const VERSION_A_SECTIONS = [
   { title: 'Your Next Steps', key: 'nextSteps' },
 ];
 
-// ââ Version B â The Deep Dive (12 sections) ââââââââââââââââââââââââââââââââââ
+// ââ Version B — The Deep Dive (12 sections) ââââââââââââââââââââââââââââââââââ
 const VERSION_B_SECTIONS = [
   { title: 'Origin Context', key: 'originContext' },
   { title: 'Your Tolerations Mapped', key: 'tolerationsMapped' },
@@ -44,12 +44,12 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
   const hasVersionB = Boolean(report.originContext || report.fullBopHypothesis || report.thirtyDayPlan);
   const sections = hasVersionB ? VERSION_B_SECTIONS : VERSION_A_SECTIONS;
 
-  // The headline BOP statement â present in both versions
+  // The headline BOP statement — present in both versions
   const bopStatement = report.bopStatement || report.fullBopHypothesis || '';
 
   const buildShareText = () => {
     const lines: string[] = [
-      isDeepDive ? 'THE DEEP DIVE â MY INVISIBLE RULE' : 'THE BLUEPRINT â MY INVISIBLE RULE',
+      isDeepDive ? 'THE DEEP DIVE — MY INVISIBLE RULE' : 'THE BLUEPRINT — MY INVISIBLE RULE',
       `Prepared for ${name}`,
       `${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`,
       '',
@@ -67,7 +67,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
         lines.push('');
       }
     });
-    lines.push('â The Invisible Rule');
+    lines.push('— The Invisible Rule');
     return lines.join('\n');
   };
 
@@ -115,7 +115,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
           </p>
         </div>
 
-        {/* ââ Invisible Rule â Hero Block ââââââââââââââââââââââââââââââââââââââ */}
+        {/* ââ Invisible Rule — Hero Block ââââââââââââââââââââââââââââââââââââââ */}
         {bopStatement && (
           <div
             className="rounded-2xl p-8 mb-10 text-center print:border print:border-amber-300 print:bg-amber-50 print:mb-6"
@@ -170,7 +170,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
           })}
         </div>
 
-        {/* ââ Upgrade CTA â Blueprint only ââââââââââââââââââââââââââââââââââââ */}
+        {/* ââ Upgrade CTA — Blueprint only ââââââââââââââââââââââââââââââââââââ */}
         {!isDeepDive && (
           <div
             className="mt-10 rounded-2xl p-8 text-center print:hidden"
@@ -189,7 +189,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
               Ready for the full transformation dossier?
             </h3>
             <p className="text-slate-400 text-sm leading-relaxed mb-6 max-w-lg mx-auto">
-              The Deep Dive adds 4 more sections â including your archetype analysis, a neurological shift framework,
+              The Deep Dive adds 4 more sections — including your archetype analysis, a neurological shift framework,
               a complete 30-day counter-strategy, and a personalized audio report in Pamela&apos;s voice.
             </p>
             <a
@@ -200,12 +200,12 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
                 boxShadow: '0 8px 32px rgba(245,158,11,0.2)',
               }}
             >
-              Upgrade to The Deep Dive â $97
+              Upgrade to The Deep Dive — $97
             </a>
           </div>
         )}
 
-        {/* ââ Completion block â Deep Dive only âââââââââââââââââââââââââââââââ */}
+        {/* ââ Completion block — Deep Dive only âââââââââââââââââââââââââââââââ */}
         {isDeepDive && (
           <div
             className="mt-10 rounded-2xl p-8 text-center print:hidden"
@@ -216,7 +216,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
           >
             <p className="text-slate-300 font-medium mb-1">You have the full picture.</p>
             <p className="text-slate-500 text-sm leading-relaxed max-w-md mx-auto">
-              This report â your archetype, your pattern, your 30-day path â is yours to return to.
+              This report — your archetype, your pattern, your 30-day path — is yours to return to.
               The work starts with noticing. You&apos;re already doing it.
             </p>
           </div>
@@ -250,7 +250,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
         {/* ââ Footer âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */}
         <div className="text-center mt-10 print:mt-6">
           <p className="text-slate-700 text-xs print:text-slate-500">
-            © {new Date().getFullYear()} The Invisible Rule · The pattern you uncovered is real â and it&apos;s yours.
+            © {new Date().getFullYear()} The Invisible Rule · The pattern you uncovered is real — and it&apos;s yours.
           </p>
         </div>
 
