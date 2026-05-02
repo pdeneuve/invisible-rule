@@ -85,7 +85,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
   };
 
   const tierLabel = isDeepDive ? 'The Deep Dive' : 'The Blueprint';
-  const sectionCount = isDeepDive ? '12' : '8';
+  const sectionCount = isDeepDive ? '12' : '7';
 
   return (
     <div className="min-h-screen bg-slate-950 print:bg-white">
@@ -110,7 +110,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
           </h1>
           <p className="text-slate-500 text-sm print:text-slate-600">
             {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-            {' Â· '}
+            {' · '}
             {sectionCount}-section analysis
           </p>
         </div>
@@ -250,7 +250,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
         {/* ââ Footer âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */}
         <div className="text-center mt-10 print:mt-6">
           <p className="text-slate-700 text-xs print:text-slate-500">
-            Â© {new Date().getFullYear()} The Invisible Rule Â· The pattern you uncovered is real â and it&apos;s yours.
+            © {new Date().getFullYear()} The Invisible Rule · The pattern you uncovered is real â and it&apos;s yours.
           </p>
         </div>
 
