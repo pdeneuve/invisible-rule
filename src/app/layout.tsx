@@ -4,17 +4,30 @@ import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
 
+// Fix 7: Add Open Graph and Twitter social sharing metadata
 export const metadata: Metadata = {
-  title: 'The Invisible Rule \u2014 Find Your Unconscious Operating System',
-  description: 'A guided process to identify the unconscious survival strategy formed in childhood that now runs your adult life on autopilot.',
+    title: 'The Invisible Rule',
+    description: 'A belief you have carried most of your life is still making your choices for you. And you have no idea it is there.',
+    openGraph: {
+          title: 'The Invisible Rule',
+          description: 'You keep starting over. But nothing changes. Discover the hidden belief that has been running your life.',
+          url: 'https://invisible-rule.vercel.app',
+          siteName: 'The Invisible Rule',
+          type: 'website',
+    },
+    twitter: {
+          card: 'summary_large_image',
+          title: 'The Invisible Rule',
+          description: 'You keep starting over. But nothing changes. Discover the hidden belief that has been running your life.',
+    },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} bg-slate-900 text-white antialiased`}>
-        {children}
-      </body>
-    </html>
-  );
-}
+    return (
+          <html lang="en" className="dark">
+                <body className={`${inter.className} bg-slate-900 text-white antialiased`}>
+                  {children}
+                </body>body>
+          </html>html>
+        );
+}</html>
