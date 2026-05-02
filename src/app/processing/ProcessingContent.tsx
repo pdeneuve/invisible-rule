@@ -53,18 +53,18 @@ export default function ProcessingContent() {
                     <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
                             <div className="text-center max-w-sm">
                                       <div className="w-12 h-12 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                                      <p className="text-slate-400 mb-1">Preparing your report...</p>p>
-                                      <p className="text-slate-600 text-sm">This takes just a moment</p>p>
+                                      <p className="text-slate-400 mb-1">Preparing your report...</p>
+                                      <p className="text-slate-600 text-sm">This takes just a moment</p>
                                 {timedOut && (
                                     <div className="mt-6">
                                                   <p className="text-slate-500 text-sm mb-4">
                                                                   Check your email - your report may have been sent there.
-                                                  </p>p>
-                                                  <Link href="/" className="text-amber-400 text-sm underline">Return to home</Link>Link>
-                                    </div>div>
+                                                  </p>
+                                                  <Link href="/" className="text-amber-400 text-sm underline">Return to home</Link>
+                                    </div>
                                       )}
-                            </div>div>
-                    </div>div>
+                            </div>
+                    </div>
                   );
   }
     
