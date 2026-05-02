@@ -49,7 +49,7 @@ function ReportContent() {
           {timedOut && (
             <div className="mt-6">
               <p className="text-slate-500 text-sm mb-4">
-                Check your email â your report may have been sent there.
+                Check your email — your report may have been sent there.
               </p>
               <Link href="/" className="text-amber-400 text-sm underline">Return to home</Link>
             </div>
