@@ -427,7 +427,7 @@ export default function VoiceInterface() {
                           {/* Fix 6: Updated homepage copy */}
                                   <h1 className="text-4xl font-light text-white mb-3 tracking-tight">
                                               The Invisible Rule
-                                  </h1>h1>
+                                  </h1>
                                   <p className="text-xl text-slate-400 mb-2">
                                               You keep starting over. But nothing changes.
                                   </p>
@@ -436,7 +436,7 @@ export default function VoiceInterface() {
                                   </p>
                         
                                   <div className="bg-slate-800/60 border border-slate-700/50 backdrop-blur-sm rounded-2xl p-8 mb-8 text-left">
-                                              <h3 className="text-white font-medium mb-5 text-sm uppercase tracking-widest text-center">What to expect</h3>h3>
+                                              <h3 className="text-white font-medium mb-5 text-sm uppercase tracking-widest text-center">What to expect</h3>
                                               <ul className="space-y-4">
                                                 {[
                                   ['\uD83C\uDFA4\uFE0F', 'A guided voice conversation \u2014 one question at a time'],
