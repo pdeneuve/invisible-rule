@@ -3,9 +3,9 @@
 import { useState } from 'react';
 
 const TIER_NAMES: Record<number, string> = {
-  1: 'First Light â $9.97',
-  2: 'The Blueprint â $29.97',
-  3: 'The Deep Dive â $97',
+  1: 'First Light — $9.97',
+  2: 'The Blueprint — $29.97',
+  3: 'The Deep Dive — $97',
 };
 
 interface Props {
@@ -59,14 +59,14 @@ export default function LeadCaptureModal({ onSubmit, onClose, tier }: Props) {
             <span className="text-amber-500 font-bold text-sm mt-0.5">FREE</span>
             <div>
               <p className="text-white font-medium text-sm">Core Insight Report</p>
-              <p className="text-slate-400 text-sm">Your BOP statement, evidence, and next steps â delivered immediately</p>
+              <p className="text-slate-400 text-sm">Your BOP statement, evidence, and next steps — delivered immediately</p>
             </div>
           </div>
           <div className="border-t border-slate-600 pt-3 flex items-start gap-3">
             <span className="text-amber-400 font-bold text-sm mt-0.5">+</span>
             <div>
               <p className="text-white font-medium text-sm">Expanded Transformation Dossier</p>
-              <p className="text-slate-400 text-sm">12â15 page deep analysis: archetype breakdown, 30-day counter-strategy, new operating principle, and full integration roadmap â sent to your inbox</p>
+              <p className="text-slate-400 text-sm">12–15 page deep analysis: archetype breakdown, 30-day counter-strategy, new operating principle, and full integration roadmap — sent to your inbox</p>
             </div>
           </div>
         </div>
