@@ -441,7 +441,7 @@ export default function VoiceInterface() {
                                                 {[
                                   ['\uD83C\uDFA4\uFE0F', 'A guided voice conversation \u2014 one question at a time'],
                                   ['\u23F1\uFE0F', '45\u201375 minutes to complete the full process'],
-                                  ['\uD83D\uDCC4', 'A free Core Insight Report delivered after the session'],
+                                  ['\uD83D\uDCC4', 'A Deep Dive Report — delivered after your session'],
                                   ['\uD83D\uDD12', 'Private, confidential, and judgment-free'],
                                 ].map(([icon, text]) => (
                                                   <li key={text} className="flex items-start gap-3 text-slate-300">
