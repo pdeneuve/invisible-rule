@@ -2,17 +2,6 @@
 
 import Link from 'next/link';
 
-// ââ Version A — The Blueprint (8 sections) âââââââââââââââââââââââââââââââââââ
-const VERSION_A_SECTIONS = [
-  { title: 'Your Tolerations', key: 'tolerationsSummary' },
-  { title: 'Repeating Themes', key: 'repeatingThemesSummary' },
-  { title: 'The Evidence', key: 'evidenceSection' },
-  { title: 'What It Protected', key: 'whatItProtected' },
-  { title: 'What It Costs Today', key: 'costToday' },
-  { title: 'Your Evolved Principle', key: 'evolvedPrinciple' },
-  { title: 'Your Next Steps', key: 'nextSteps' },
-];
-
 // ââ Version B — The Deep Dive (12 sections) ââââââââââââââââââââââââââââââââââ
 const VERSION_B_SECTIONS = [
   { title: 'Origin Context', key: 'originContext' },
@@ -38,18 +27,17 @@ interface Props {
 export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
   const name = firstName || 'You';
   const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  const isDeepDive = tier === 3;
+  const isDeepDive = tier === 2;
 
   // Auto-detect which version based on report keys
-  const hasVersionB = Boolean(report.originContext || report.fullBopHypothesis || report.thirtyDayPlan);
-  const sections = hasVersionB ? VERSION_B_SECTIONS : VERSION_A_SECTIONS;
+  const sections = VERSION_B_SECTIONS;
 
   // The headline BOP statement — present in both versions
   const bopStatement = report.bopStatement || report.fullBopHypothesis || '';
 
   const buildShareText = () => {
     const lines: string[] = [
-      isDeepDive ? 'THE DEEP DIVE — MY INVISIBLE RULE' : 'THE BLUEPRINT — MY INVISIBLE RULE',
+      'THE DEEP DIVE — MY INVISIBLE RULE',
       `Prepared for ${name}`,
       `${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`,
       '',
@@ -75,7 +63,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
     if (isMobile && typeof navigator.share === 'function') {
       try {
         await navigator.share({
-          title: isDeepDive ? 'My Deep Dive Report' : 'My Blueprint Report',
+          title: 'My Deep Dive Report',
           text: buildShareText(),
         });
         return;
@@ -84,8 +72,8 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
     window.print();
   };
 
-  const tierLabel = isDeepDive ? 'The Deep Dive' : 'The Blueprint';
-  const sectionCount = isDeepDive ? '12' : '7';
+  const tierLabel = 'The Deep Dive';
+  const sectionCount = '12';
 
   return (
     <div className="min-h-screen bg-slate-950 print:bg-white">
@@ -170,7 +158,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
           })}
         </div>
 
-        {/* ââ Upgrade CTA — Blueprint only ââââââââââââââââââââââââââââââââââââ */}
+        {/* ── Upgrade CTA — Tier 1 only ─────────────────────────────────── */}
         {!isDeepDive && (
           <div
             className="mt-10 rounded-2xl p-8 text-center print:hidden"
