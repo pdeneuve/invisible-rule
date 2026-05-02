@@ -238,7 +238,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
         {/* ââ Footer âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */}
         <div className="text-center mt-10 print:mt-6">
           <p className="text-slate-700 text-xs print:text-slate-500">
-            © {new Date().getFullYear()} The Invisible Rule · The pattern you uncovered is real — and it&apos;s yours.
+            © {new Date().getFullYear()}{' '}The Invisible Rule · The pattern you uncovered is real — and it&apos;s yours.
           </p>
         </div>
 
