@@ -12,12 +12,12 @@ export default function NotFound() {
                                                   boxShadow: '0 0 40px rgba(245, 158, 11, 0.2)',
                                     }}
                                   >
-                                  <span className="text-white text-2xl font-light">IR</span>span>
-                        </div>div>
-                        <h1 className="text-6xl font-light text-white mb-4">404</h1>h1>
+                                  <span className="text-white text-2xl font-light">IR</span>
+                        </div>
+                        <h1 className="text-6xl font-light text-white mb-4">404</h1>
                         <p className="text-slate-400 text-lg mb-8">
                                   This page could not be found.
-                        </p>p>
+                        </p>
                         <Link
                                     href="/"
                                     className="inline-block px-8 py-4 rounded-2xl text-slate-900 font-semibold text-base transition-all duration-300 hover:scale-105 active:scale-95"
@@ -27,8 +27,8 @@ export default function NotFound() {
                                     }}
                                   >
                                   Return to Home
-                        </Link>Link>
-                </div>div>
-          </div>div>
+                        </Link>
+                </div>
+          </div>
         );
-}</div>
+}
