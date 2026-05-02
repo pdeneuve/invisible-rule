@@ -12,7 +12,7 @@ const TIERS = [
     name: 'First Light',
     price: '$7',
     tagline: 'See your Invisible Rule for the first time',
-    description: 'The moment of recognition Ã¢ÂÂ your unconscious pattern named, clearly and simply.',
+    description: 'The moment of recognition — your unconscious pattern named, clearly and simply.',
     includes: [
       'Your Invisible Rule statement',
       'The one core insight that changes everything',
@@ -28,11 +28,11 @@ const TIERS = [
     name: 'The Blueprint',
     price: '$27',
     tagline: 'Your complete pattern mapped in full',
-    description: 'Every layer of your Invisible Rule documented Ã¢ÂÂ where it came from, what it costs, and how to shift it.',
+    description: 'Every layer of your Invisible Rule documented — where it came from, what it costs, and how to shift it.',
     includes: [
       'Full 8-section Core Insight Report',
       'Evidence from your own words',
-      'What it protected Ã¢ÂÂ and what it costs today',
+      'What it protected — and what it costs today',
       'Your Evolved Principle',
       'Downloadable PDF',
       'Delivered by email',
@@ -47,10 +47,10 @@ const TIERS = [
     name: 'The Deep Dive',
     price: '$97',
     tagline: 'Hear it. Read it. Feel it. Share it.',
-    description: 'Your full report Ã¢ÂÂ plus a personalized audio podcast in Pamela\'s voice walking you through your own pattern.',
+    description: 'Your full report — plus a personalized audio podcast in Pamela\'s voice walking you through your own pattern.',
     includes: [
       'Everything in The Blueprint',
-      'Personalized audio podcast Ã¢ÂÂ Pamela & co-host discuss YOUR results',
+      'Personalized audio podcast — Pamela & co-host discuss YOUR results',
       'Branded slide deck of your key insights',
       'Shareable link to your complete profile',
       'All assets delivered to your inbox',
@@ -127,7 +127,7 @@ export default function PricingScreen({ onSelectTier }: Props) {
             <ul className="space-y-2.5 mb-8 flex-1">
               {tier.includes.map((item, i) => (
                 <li key={i} className="flex items-start gap-2.5 text-sm text-slate-300">
-                  <span className={`mt-0.5 flex-shrink-0 ${tier.featured ? 'text-amber-400' : 'text-slate-500'}`}>Ã¢ÂÂ</span>
+                  <span className={`mt-0.5 flex-shrink-0 ${tier.featured ? 'text-amber-400' : 'text-slate-500'}`}>✓</span>
                   <span>{item}</span>
                 </li>
               ))}
