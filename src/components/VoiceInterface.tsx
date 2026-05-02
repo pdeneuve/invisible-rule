@@ -420,9 +420,9 @@ export default function VoiceInterface() {
                                                             >
                                                             <svg className="w-10 h-10 text-white/90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                                                            </svg>svg>
-                                              </div>div>
-                                  </div>div>
+                                                            </svg>
+                                              </div>
+                                  </div>
                         
                           {/* Fix 6: Updated homepage copy */}
                                   <h1 className="text-4xl font-light text-white mb-3 tracking-tight">
@@ -430,10 +430,10 @@ export default function VoiceInterface() {
                                   </h1>h1>
                                   <p className="text-xl text-slate-400 mb-2">
                                               You keep starting over. But nothing changes.
-                                  </p>p>
+                                  </p>
                                   <p className="text-slate-500 mb-10 leading-relaxed max-w-md mx-auto">
                                               A belief you have carried most of your life is still making your choices for you. And you have no idea it is there. This is your Invisible Rule.
-                                  </p>p>
+                                  </p>
                         
                                   <div className="bg-slate-800/60 border border-slate-700/50 backdrop-blur-sm rounded-2xl p-8 mb-8 text-left">
                                               <h3 className="text-white font-medium mb-5 text-sm uppercase tracking-widest text-center">What to expect</h3>h3>
@@ -445,17 +445,17 @@ export default function VoiceInterface() {
                                   ['\uD83D\uDD12', 'Private, confidential, and judgment-free'],
                                 ].map(([icon, text]) => (
                                                   <li key={text} className="flex items-start gap-3 text-slate-300">
-                                                                    <span className="text-lg leading-none mt-0.5">{icon}</span>span>
-                                                                    <span>{text}</span>span>
-                                                  </li>li>
+                                                                    <span className="text-lg leading-none mt-0.5">{icon}</span>
+                                                                    <span>{text}</span>
+                                                  </li>
                                                 ))}
-                                              </ul>ul>
-                                  </div>div>
+                                              </ul>
+                                  </div>
                         
                           {errorMessage && (
                               <div className="mb-4 bg-red-900/30 border border-red-700/50 rounded-xl p-4 text-red-300 text-sm text-left">
-                                            <p className="font-medium mb-1">Error</p>p>
-                                            <p>{errorMessage}</p>p>
+                                            <p className="font-medium mb-1">Error</p>
+                                            <p>{errorMessage}</p>
                                 {/* Fix 2: Try Again button when connection times out */}
                                 {connectionTimedOut && (
                                                 <button
@@ -463,9 +463,9 @@ export default function VoiceInterface() {
                                                                     className="mt-3 px-4 py-2 bg-red-800/50 hover:bg-red-800 border border-red-600 rounded-lg text-red-200 text-sm transition-colors"
                                                                   >
                                                                   Try Again
-                                                </button>button>
+                                                </button>
                                             )}
-                              </div>div>
+                              </div>
                                   )}
                         
                                   <button
@@ -477,13 +477,13 @@ export default function VoiceInterface() {
                                                 }}
                                               >
                                               Begin Voice Session
-                                  </button>button>
+                                  </button>
                                   <p className="text-slate-600 text-xs mt-5 leading-relaxed">
                                               Make sure your microphone is enabled. This is pattern-mapping work, not therapy.<br />
                                               If you are in crisis, please contact a mental health professional.
-                                  </p>p>
-                        </div>div>
-                </div>div>
+                                  </p>
+                        </div>
+                </div>
               );
   }
   
@@ -497,25 +497,25 @@ export default function VoiceInterface() {
                                                 className="w-7 h-7 rounded-full flex items-center justify-center"
                                                 style={{ background: 'radial-gradient(circle, #fbbf24, #d97706)' }}
                                               >
-                                              <span className="text-slate-900 text-xs font-bold">IR</span>span>
-                                  </div>div>
-                                  <span className="text-white/80 font-medium text-sm">The Invisible Rule</span>span>
-                        </div>div>
+                                              <span className="text-slate-900 text-xs font-bold">IR</span>
+                                  </div>
+                                  <span className="text-white/80 font-medium text-sm">The Invisible Rule</span>
+                        </div>
                         <div className="flex items-center gap-4">
                           {callState !== 'idle' && callState !== 'connecting' && (
-                        <span className="text-slate-500 text-sm font-mono">{formatDuration(callDuration)}</span>span>
+                        <span className="text-slate-500 text-sm font-mono">{formatDuration(callDuration)}</span>
                                   )}
                                   <div className="text-right">
-                                              <div className="text-slate-500 text-xs mb-1">{PHASE_LABELS[currentPhaseIndex]}</div>div>
+                                              <div className="text-slate-500 text-xs mb-1">{PHASE_LABELS[currentPhaseIndex]}</div>
                                               <div className="w-28 bg-slate-800 rounded-full h-1">
                                                             <div
                                                                               className="bg-amber-500 h-1 rounded-full transition-all duration-700"
                                                                               style={{ width: `${overallProgress}%` }}
                                                                             />
-                                              </div>div>
-                                  </div>div>
-                        </div>div>
-                </div>div>
+                                              </div>
+                                  </div>
+                        </div>
+                </div>
           
             {/* Main area */}
                 <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
@@ -525,24 +525,24 @@ export default function VoiceInterface() {
                   {/* Status text */}
                         <div className="mt-8 text-center">
                           {callState === 'connecting' && (
-                        <p className="text-slate-400 text-lg animate-pulse">Connecting...</p>p>
+                        <p className="text-slate-400 text-lg animate-pulse">Connecting...</p>
                                   )}
                           {callState === 'active' && (
-                        <p className="text-slate-500 text-base">Listening...</p>p>
+                        <p className="text-slate-500 text-base">Listening...</p>
                                   )}
                           {callState === 'ai-speaking' && (
-                        <p className="text-amber-400/80 text-base">Speaking</p>p>
+                        <p className="text-amber-400/80 text-base">Speaking</p>
                                   )}
                           {callState === 'user-speaking' && (
-                        <p className="text-blue-400/80 text-base">I&apos;m listening</p>p>
+                        <p className="text-blue-400/80 text-base">I&apos;m listening</p>
                                   )}
                           {callState === 'ended' && (
                         <div className="text-center">
-                                      <p className="text-white text-lg mb-2">Session complete</p>p>
-                                      <p className="text-slate-400 text-sm">Your report is being prepared</p>p>
-                        </div>div>
+                                      <p className="text-white text-lg mb-2">Session complete</p>
+                                      <p className="text-slate-400 text-sm">Your report is being prepared</p>
+                        </div>
                                   )}
-                        </div>div>
+                        </div>
                 
                   {/* Live transcript preview */}
                   {showTranscript && transcript.length > 0 && (
@@ -559,12 +559,12 @@ export default function VoiceInterface() {
                                                                                       entry.role === 'user' ? 'bg-slate-700' : 'bg-slate-800'
                                                                   }`}>
                                                                     {entry.text}
-                                                                  </span>span>
-                                                  </div>div>
+                                                                  </span>
+                                                  </div>
                                                 ))}
-                      </div>div>
+                      </div>
                         )}
-                </div>div>
+                </div>
           
             {/* Controls */}
             {callState !== 'idle' && callState !== 'ended' && (
@@ -577,8 +577,8 @@ export default function VoiceInterface() {
                                           >
                                           <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                          </svg>svg>
-                              </button>button>
+                                          </svg>
+                              </button>
                     
                       {/* Mute */}
                               <button
@@ -594,13 +594,13 @@ export default function VoiceInterface() {
                                                           <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                                                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                                                          </svg>svg>
+                                                          </svg>
                                                         ) : (
                                                           <svg className="w-6 h-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                                                          </svg>svg>
+                                                          </svg>
                                           )}
-                              </button>button>
+                              </button>
                     
                       {/* End call */}
                               <button
@@ -610,9 +610,9 @@ export default function VoiceInterface() {
                                           >
                                           <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
                                                         <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
-                                          </svg>svg>
-                              </button>button>
-                    </div>div>
+                                          </svg>
+                              </button>
+                    </div>
                 )}
           
             {/* Ended state CTA */}
@@ -631,14 +631,14 @@ export default function VoiceInterface() {
                                             style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', boxShadow: '0 8px 32px rgba(245,158,11,0.3)' }}
                                           >
                                           Get Your Report
-                              </button>button>
+                              </button>
                               <button
                                             onClick={() => window.location.reload()}
                                             className="text-slate-500 hover:text-slate-400 text-sm transition-colors"
                                           >
                                           Start a new session
-                              </button>button>
-                    </div>div>
+                              </button>
+                    </div>
                 )}
           
             {showLeadCapture && (
@@ -662,8 +662,8 @@ export default function VoiceInterface() {
                                                             setShowLeadCapture(true);
                                             }}
                                           />
-                    </div>div>
+                    </div>
                 )}
-          </div>div>
+          </div>
         );
 }</div>
