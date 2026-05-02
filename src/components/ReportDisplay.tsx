@@ -177,7 +177,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
               Ready for the full transformation dossier?
             </h3>
             <p className="text-slate-400 text-sm leading-relaxed mb-6 max-w-lg mx-auto">
-              The Deep Dive adds 4 more sections — including your archetype analysis, a neurological shift framework,
+              The Deep Dive adds 4 more sections - including your archetype analysis, a neurological shift framework,
               a complete 30-day counter-strategy, and a personalized audio report in Pamela&apos;s voice.
             </p>
             <a
@@ -188,7 +188,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
                 boxShadow: '0 8px 32px rgba(245,158,11,0.2)',
               }}
             >
-              Upgrade to The Deep Dive — $97
+              Upgrade to The Deep Dive - $97
             </a>
           </div>
         )}
