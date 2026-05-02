@@ -75,4 +75,4 @@ export default function ProcessingContent() {
               return <DeepDiveDisplay report={report} firstName={firstName} />;
       }
       return <ReportDisplay report={report} firstName={firstName} tier={2} />;
-}</div>
+}
