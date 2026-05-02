@@ -97,8 +97,8 @@ export async function POST(req: NextRequest) {
       }
   }
 
-  // TIER 2 & 3: Blueprint / Deep Dive
-  const tierLabel = tier === 3 ? 'The Deep Dive' : 'The Blueprint';
+  // TIER 2: Deep Dive
+  const tierLabel = 'The Deep Dive';
     const bopStatement = report.bopStatement || report.fullBopHypothesis || '';
 
   const sectionKeys = [
@@ -121,14 +121,9 @@ export async function POST(req: NextRequest) {
       .map(s => section(s.title, report[s.key]))
       .join('');
 
-  const upgradeCta = tier !== 3 ? btn(
-        process.env.NEXT_PUBLIC_GHL_URL_TIER3 || '/',
-        'Upgrade to The Deep Dive - $97'
-      ) : '';
+  const upgradeCta = '';
 
-  const sigLine = tier === 3
-      ? 'Your full Deep Dive is above. The work starts with noticing - you are already doing it.'
-        : 'I am proud of the work you just did. This report is yours to return to whenever you need it.';
+  const sigLine = 'Your full Deep Dive is above. The work starts with noticing - you are already doing it.';
 
   const html = wrap(`
       ${header(tierLabel)}
@@ -150,9 +145,7 @@ export async function POST(req: NextRequest) {
         const { data, error } = await resend.emails.send({
                 from: fromAddress,
                 to: email,
-                subject: tier === 3
-                  ? `${name}, The Deep Dive is ready`
-                          : `${name}, The Blueprint is ready`,
+                subject: `${name}, The Deep Dive is ready`,
                 html,
         });
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
