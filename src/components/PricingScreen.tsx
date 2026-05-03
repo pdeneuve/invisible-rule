@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 interface Props {
-  onSelectTier: (tier: 1 | 2 | 3) => void;
+  onSelectTier: (tier: 1 | 2) => void;
 }
 
 const TIERS = [
@@ -12,7 +12,7 @@ const TIERS = [
     name: 'First Light',
     price: '$7',
     tagline: 'See your Invisible Rule for the first time',
-    description: 'The moment of recognition — your unconscious pattern named, clearly and simply.',
+    description: 'The moment of recognition - your unconscious pattern named, clearly and simply.',
     includes: [
       'Your Invisible Rule statement',
       'The one core insight that changes everything',
@@ -25,33 +25,15 @@ const TIERS = [
   },
   {
     id: 2 as const,
-    name: 'The Blueprint',
-    price: '$27',
-    tagline: 'Your complete pattern mapped in full',
-    description: 'Every layer of your Invisible Rule documented — where it came from, what it costs, and how to shift it.',
-    includes: [
-      'Full 8-section Core Insight Report',
-      'Evidence from your own words',
-      'What it protected — and what it costs today',
-      'Your Evolved Principle',
-      'Downloadable PDF',
-      'Delivered by email',
-    ],
-    cta: 'Get The Blueprint',
-    featured: false,
-    color: 'border-slate-600',
-    badge: null,
-  },
-  {
-    id: 3 as const,
     name: 'The Deep Dive',
     price: '$97',
     tagline: 'Hear it. Read it. Feel it. Share it.',
-    description: 'Your full report — plus a personalized audio podcast in Pamela\'s voice walking you through your own pattern.',
+    description: 'Your full report - plus a personalized audio podcast, slide deck, and video walking you through your own pattern.',
     includes: [
-      'Everything in The Blueprint',
-      'Personalized audio podcast — Pamela & co-host discuss YOUR results',
+      'Full multi-section Core Insight Report',
+      'Personalized audio podcast in Pamela\'s voice',
       'Branded slide deck of your key insights',
+      'Personalized video narration',
       'Shareable link to your complete profile',
       'All assets delivered to your inbox',
     ],
@@ -65,7 +47,7 @@ const TIERS = [
 export default function PricingScreen({ onSelectTier }: Props) {
   const [selecting, setSelecting] = useState<number | null>(null);
 
-  const handleSelect = (tierId: 1 | 2 | 3) => {
+  const handleSelect = (tierId: 1 | 2) => {
     setSelecting(tierId);
     onSelectTier(tierId);
   };
@@ -73,7 +55,6 @@ export default function PricingScreen({ onSelectTier }: Props) {
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center px-4 py-12">
 
-      {/* Header */}
       <div className="text-center mb-10 max-w-2xl">
         <div className="w-12 h-12 rounded-full mx-auto mb-5 flex items-center justify-center"
           style={{ background: 'radial-gradient(circle at 40% 40%, #fbbf24, #d97706)' }}>
@@ -87,8 +68,7 @@ export default function PricingScreen({ onSelectTier }: Props) {
         </p>
       </div>
 
-      {/* Pricing cards */}
-      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="w-full max-w-3xl grid grid-cols-1 md:grid-cols-2 gap-6">
         {TIERS.map((tier) => (
           <div
             key={tier.id}
@@ -98,7 +78,6 @@ export default function PricingScreen({ onSelectTier }: Props) {
                 : 'bg-slate-900/60'
             }`}
           >
-            {/* Badge */}
             {tier.badge && (
               <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                 <span className="bg-amber-500 text-slate-900 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
@@ -107,7 +86,6 @@ export default function PricingScreen({ onSelectTier }: Props) {
               </div>
             )}
 
-            {/* Tier name & price */}
             <div className="mb-5">
               <p className={`text-xs font-semibold uppercase tracking-widest mb-1 ${tier.featured ? 'text-amber-400' : 'text-slate-500'}`}>
                 {tier.name}
@@ -118,22 +96,19 @@ export default function PricingScreen({ onSelectTier }: Props) {
               <p className="text-slate-300 text-sm font-medium leading-snug">{tier.tagline}</p>
             </div>
 
-            {/* Description */}
             <p className="text-slate-500 text-sm leading-relaxed mb-6">
               {tier.description}
             </p>
 
-            {/* What's included */}
             <ul className="space-y-2.5 mb-8 flex-1">
               {tier.includes.map((item, i) => (
                 <li key={i} className="flex items-start gap-2.5 text-sm text-slate-300">
-                  <span className={`mt-0.5 flex-shrink-0 ${tier.featured ? 'text-amber-400' : 'text-slate-500'}`}>✓</span>
+                  <span className={`mt-0.5 flex-shrink-0 ${tier.featured ? 'text-amber-400' : 'text-slate-500'}`}>&#10003;</span>
                   <span>{item}</span>
                 </li>
               ))}
             </ul>
 
-            {/* CTA button */}
             <button
               onClick={() => handleSelect(tier.id)}
               disabled={selecting !== null}
@@ -153,12 +128,10 @@ export default function PricingScreen({ onSelectTier }: Props) {
         ))}
       </div>
 
-      {/* Reassurance */}
       <p className="text-slate-600 text-xs mt-8 text-center">
         Secure payment. Instant delivery. No subscriptions.
       </p>
 
-      {/* Start over */}
       <button
         onClick={() => window.location.reload()}
         className="text-slate-700 hover:text-slate-500 text-xs mt-4 transition-colors"
