@@ -3,14 +3,14 @@
 import { Suspense } from 'react';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import ReportDisplay from '@/components/ReportDisplay';
+import FirstLightDisplay from '@/components/FirstLightDisplay';
 import DeepDiveDisplay from '@/components/DeepDiveDisplay';
 import Link from 'next/link';
 
 function ReportContent() {
   const searchParams = useSearchParams();
   const tierParam = searchParams.get('tier');
-  const tier = tierParam ? (parseInt(tierParam) as 1 | 2 | 3) : 2;
+  const tier: 1 | 2 | null = tierParam ? (parseInt(tierParam) as 1 | 2) : null;
 
   const [report, setReport] = useState<Record<string, string> | null>(null);
   const [firstName, setFirstName] = useState<string>('');
@@ -49,7 +49,7 @@ function ReportContent() {
           {timedOut && (
             <div className="mt-6">
               <p className="text-slate-500 text-sm mb-4">
-                Check your email — your report may have been sent there.
+                Check your email - your report may have been sent there.
               </p>
               <Link href="/" className="text-amber-400 text-sm underline">Return to home</Link>
             </div>
@@ -59,11 +59,13 @@ function ReportContent() {
     );
   }
 
-  if (tier === 3) {
+  // Tier 2 (Deep Dive $97) gets the full DeepDiveDisplay with all assets
+  if (tier === 2) {
     return <DeepDiveDisplay report={report} firstName={firstName} />;
   }
 
-  return <ReportDisplay report={report} firstName={firstName} tier={tier} />;
+  // Free users (tier null) and Tier 1 (First Light $7) both get FirstLightDisplay
+  return <FirstLightDisplay report={report} firstName={firstName} />;
 }
 
 export default function ReportPage() {
