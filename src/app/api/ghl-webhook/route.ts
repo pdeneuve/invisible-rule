@@ -1,25 +1,20 @@
 /**
  * GHL (GoHighLevel) Payment Webhook
  *
- * STEP 1: Create 2 order forms in GHL:
- *   - "First Light"   - $7
- *   - "The Deep Dive" - $97
+ * On Tier 2 (Deep Dive $97) payment:
+ *   - Looks up the user's saved voice session by email
+ *   - Calls /api/fulfill-deep-dive (which generates audio + video and emails everything)
+ *   - If no session exists yet, emails the user with a link to complete the voice session first
  *
- * STEP 2: Set SUCCESS REDIRECT URL for each:
- *   - First Light:   https://invisible-rule.vercel.app/processing?tier=1
- *   - The Deep Dive: https://invisible-rule.vercel.app/processing?tier=2
- *
- * STEP 3: Set WEBHOOK URL for each:
- *   - First Light:   https://invisible-rule.vercel.app/api/ghl-webhook?tier=1
- *   - The Deep Dive: https://invisible-rule.vercel.app/api/ghl-webhook?tier=2
- *
- * STEP 4: Add env vars to Vercel:
- *   NEXT_PUBLIC_GHL_URL_TIER1 = First Light order form URL
- *   NEXT_PUBLIC_GHL_URL_TIER2 = Deep Dive order form URL
+ * On Tier 1 (First Light $7) payment:
+ *   - Sends a payment confirmation email pointing to their First Light report
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
+import { getSession } from '@/lib/session-store';
+
+export const maxDuration = 300;
 
 const TIER_NAMES: Record<number, string> = {
   1: 'First Light',
@@ -76,98 +71,84 @@ function extractName(payload: GHLPayload): string {
   return payload.firstName || payload.first_name || 'Friend';
 }
 
-async function sendConfirmationEmail(
+function appUrl(): string {
+  return process.env.NEXT_PUBLIC_APP_URL || 'https://invisible-rule.vercel.app';
+}
+
+function fromAddress(): string {
+  return process.env.RESEND_FROM_EMAIL || 'The Invisible Rule <onboarding@resend.dev>';
+}
+
+async function sendSimpleEmail(
   resend: Resend,
-  email: string,
-  firstName: string,
-  tier: number,
-  fromAddress: string
+  to: string,
+  subject: string,
+  bodyHtml: string
 ): Promise<void> {
-  const tierName = TIER_NAMES[tier] || 'Your Report';
-  const tierPrice = TIER_PRICES[tier] || '';
-  const reportUrl = `https://invisible-rule.vercel.app/processing?tier=${tier}`;
-  const year = new Date().getFullYear();
-
-  const html = `
+  const wrapped = `
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Payment Confirmed - ${tierName}</title>
-</head>
-<body style="margin:0;padding:0;background-color:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <div style="max-width:560px;margin:0 auto;padding:48px 24px;">
-
-    <div style="text-align:center;margin-bottom:40px;">
-      <div style="width:56px;height:56px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:50%;margin:0 auto 16px;">
-        <span style="color:#0f172a;font-weight:700;font-size:16px;line-height:56px;display:block;text-align:center;">IR</span>
-      </div>
-      <p style="color:#f59e0b;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;margin:0 0 8px 0;">
-        Payment Confirmed
-      </p>
-      <h1 style="color:#ffffff;font-size:26px;font-weight:300;margin:0 0 6px 0;">
-        ${firstName}, you're in.
-      </h1>
-      <p style="color:#64748b;font-size:14px;margin:0;">
-        ${tierName} &middot; ${tierPrice}
-      </p>
-    </div>
-
-    <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:28px 32px;margin-bottom:24px;">
-      <p style="color:#94a3b8;font-size:13px;margin:0 0 16px 0;line-height:1.6;">
-        Your payment was received. Your personalized assets are being prepared and will arrive in your inbox shortly. You can also click below to access them now.
-      </p>
-      <a href="${reportUrl}"
-         style="display:block;background:linear-gradient(135deg,#f59e0b,#d97706);color:#0f172a;font-weight:600;font-size:15px;padding:16px 24px;border-radius:10px;text-decoration:none;text-align:center;">
-        Access Your ${tierName} Report
-      </a>
-    </div>
-
-    <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:24px 32px;margin-bottom:32px;">
-      <p style="color:#f59e0b;font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;margin:0 0 14px 0;">
-        What's included
-      </p>
-      ${tier === 1 ? `
-      <ul style="color:#cbd5e1;font-size:14px;line-height:1.8;margin:0;padding-left:0;list-style:none;">
-        <li>&middot; &nbsp;Your Invisible Rule - stated in full</li>
-        <li>&middot; &nbsp;The One Insight That Changes Everything</li>
-        <li>&middot; &nbsp;Download / share your report</li>
-      </ul>
-      ` : ''}
-      ${tier === 2 ? `
-      <ul style="color:#cbd5e1;font-size:14px;line-height:1.8;margin:0;padding-left:0;list-style:none;">
-        <li>&middot; &nbsp;Complete multi-section analysis report</li>
-        <li>&middot; &nbsp;Personalized audio podcast in Pamela's voice</li>
-        <li>&middot; &nbsp;Branded slide deck of your key insights</li>
-        <li>&middot; &nbsp;Personalized cinematic video narration</li>
-        <li>&middot; &nbsp;30-day counter-strategy + neurological shift framework</li>
-      </ul>
-      ` : ''}
-    </div>
-
+<html>
+<body style="margin:0;padding:0;background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:560px;margin:0 auto;padding:48px 24px;color:#cbd5e1;">
     <div style="text-align:center;margin-bottom:32px;">
-      <p style="color:#475569;font-size:12px;line-height:1.7;margin:0;">
-        For the best experience, open the report link above in the same browser<br />
-        you used for your voice session.
-      </p>
+      <div style="width:56px;height:56px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:50%;margin:0 auto 16px;line-height:56px;text-align:center;color:#0f172a;font-weight:700;">IR</div>
+      <p style="color:#f59e0b;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;margin:0;">The Invisible Rule</p>
     </div>
-
-    <div style="text-align:center;border-top:1px solid #1e293b;padding-top:24px;">
-      <p style="color:#334155;font-size:12px;line-height:1.6;margin:0;">
-        &copy; ${year} The Invisible Rule
-      </p>
+    ${bodyHtml}
+    <div style="text-align:center;border-top:1px solid #1e293b;padding-top:24px;margin-top:32px;">
+      <p style="color:#475569;font-size:12px;line-height:1.6;margin:0;">&copy; ${new Date().getFullYear()} The Invisible Rule</p>
     </div>
-
   </div>
 </body>
 </html>`;
+  await resend.emails.send({ from: fromAddress(), to, subject, html: wrapped });
+}
 
-  await resend.emails.send({
-    from: fromAddress,
-    to: email,
-    subject: `${firstName}, your ${tierName} is ready`,
-    html,
+async function sendNoSessionEmail(
+  resend: Resend,
+  email: string,
+  firstName: string,
+  tier: number
+): Promise<void> {
+  const tierName = TIER_NAMES[tier];
+  const body = `
+    <h1 style="color:#ffffff;font-size:24px;font-weight:300;margin:0 0 16px;">${firstName}, one quick step.</h1>
+    <p style="font-size:15px;line-height:1.7;margin:0 0 16px;">Your payment for ${tierName} was received. To deliver your personalized assets, we need your voice session first.</p>
+    <p style="font-size:15px;line-height:1.7;margin:0 0 24px;">Take 30 to 60 minutes when you have a quiet room, then we will email you your complete ${tierName}.</p>
+    <div style="text-align:center;margin:32px 0;">
+      <a href="${appUrl()}" style="display:inline-block;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#0f172a;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;text-decoration:none;">Begin your voice session</a>
+    </div>
+    <p style="font-size:13px;color:#64748b;margin:0;">Once your session is complete, your ${tierName} will be generated and emailed within minutes - automatically.</p>
+  `;
+  await sendSimpleEmail(resend, email, `${firstName}, complete your voice session to receive your ${tierName}`, body);
+}
+
+async function sendTier1ConfirmationEmail(
+  resend: Resend,
+  email: string,
+  firstName: string
+): Promise<void> {
+  const reportUrl = `${appUrl()}/processing?tier=1`;
+  const body = `
+    <h1 style="color:#ffffff;font-size:24px;font-weight:300;margin:0 0 16px;">${firstName}, you're in.</h1>
+    <p style="color:#64748b;font-size:14px;margin:0 0 24px;">First Light &middot; ${TIER_PRICES[1]}</p>
+    <p style="font-size:15px;line-height:1.7;margin:0 0 16px;">Your payment was received. Your First Light report has been emailed to you separately.</p>
+    <div style="text-align:center;margin:32px 0;">
+      <a href="${reportUrl}" style="display:inline-block;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#0f172a;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;text-decoration:none;">Access Your First Light</a>
+    </div>
+  `;
+  await sendSimpleEmail(resend, email, `${firstName}, your First Light is ready`, body);
+}
+
+async function fulfillDeepDive(
+  firstName: string,
+  email: string,
+  report: Record<string, string>
+): Promise<void> {
+  await fetch(`${appUrl()}/api/fulfill-deep-dive`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ firstName, email, report }),
   });
 }
 
@@ -200,21 +181,31 @@ export async function POST(req: NextRequest) {
   const firstName = extractName(payload);
 
   const resendKey = process.env.RESEND_API_KEY;
-  if (resendKey && email) {
-    const resend = new Resend(resendKey);
-    const fromAddress = process.env.RESEND_FROM_EMAIL || 'The Invisible Rule <onboarding@resend.dev>';
-    try {
-      await sendConfirmationEmail(resend, email, firstName, tier, fromAddress);
-    } catch (err) {
-      console.error('GHL webhook: failed to send confirmation email:', err);
-    }
+  if (!resendKey || !email) {
+    console.warn('Skipping fulfillment - missing RESEND_API_KEY or email');
+    return NextResponse.json({ received: true, tier, fulfilled: false }, { status: 200 });
   }
 
-  return NextResponse.json({
-    received: true,
-    tier,
-    email: email ? `${email.slice(0, 3)}***` : 'none',
-  }, { status: 200 });
+  const resend = new Resend(resendKey);
+
+  try {
+    if (tier === 1) {
+      await sendTier1ConfirmationEmail(resend, email, firstName);
+      return NextResponse.json({ received: true, tier, fulfilled: true }, { status: 200 });
+    }
+
+    const session = await getSession(email);
+    if (!session || !session.report) {
+      await sendNoSessionEmail(resend, email, firstName, tier);
+      return NextResponse.json({ received: true, tier, fulfilled: false, reason: 'no-session' }, { status: 200 });
+    }
+
+    await fulfillDeepDive(session.firstName || firstName, email, session.report);
+    return NextResponse.json({ received: true, tier, fulfilled: true }, { status: 200 });
+  } catch (err) {
+    console.error('GHL webhook fulfillment error:', err);
+    return NextResponse.json({ received: true, tier, fulfilled: false, error: 'internal' }, { status: 200 });
+  }
 }
 
 export async function GET() {
