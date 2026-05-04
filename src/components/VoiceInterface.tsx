@@ -3,7 +3,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Vapi from '@vapi-ai/web';
 import { v4 as uuidv4 } from 'uuid';
 import VoiceOrb from './VoiceOrb';
-import LeadCaptureModal from './LeadCaptureModal';
 import SafetyModal from './SafetyModal';
 import PricingScreen from './PricingScreen';
 
@@ -33,7 +32,6 @@ export default function VoiceInterface() {
     const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
     const [currentPhaseIndex, setCurrentPhaseIndex] = useState(0);
     const [volumeLevel, setVolumeLevel] = useState(0);
-    const [showLeadCapture, setShowLeadCapture] = useState(false);
     const [showPricing, setShowPricing] = useState(false);
     const [selectedTier, setSelectedTier] = useState<1 | 2 | null>(null);
     const [showSafety, setShowSafety] = useState(false);
@@ -43,11 +41,34 @@ export default function VoiceInterface() {
     const [showTranscript, setShowTranscript] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [connectionTimedOut, setConnectionTimedOut] = useState(false);
+
+    // Email captured before voice session starts
+    const [emailCaptured, setEmailCaptured] = useState(false);
+    const [capturedFirstName, setCapturedFirstName] = useState('');
+    const [capturedEmail, setCapturedEmail] = useState('');
+    const [showEarlyCapture, setShowEarlyCapture] = useState(false);
+    const [earlyName, setEarlyName] = useState('');
+    const [earlyEmail, setEarlyEmail] = useState('');
+    const [earlyError, setEarlyError] = useState('');
+    const [earlySubmitting, setEarlySubmitting] = useState(false);
+
     const vapiRef = useRef<InstanceType<typeof Vapi> | null>(null);
     const transcriptRef = useRef<HTMLDivElement>(null);
     const durationRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const callStartTimeRef = useRef<number | null>(null);
     const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Restore captured email from localStorage if present
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const ce = localStorage.getItem('captured_email');
+        const cf = localStorage.getItem('captured_firstName');
+        if (ce && cf) {
+            setCapturedEmail(ce);
+            setCapturedFirstName(cf);
+            setEmailCaptured(true);
+        }
+    }, []);
 
     useEffect(() => {
         if (transcriptRef.current) {
@@ -107,6 +128,133 @@ export default function VoiceInterface() {
         }
     }, []);
 
+    const handleLeadSubmit = useCallback(async (firstName: string, email: string) => {
+        const tier = selectedTier;
+        const reportTier = tier === 1 ? 1 : 2;
+        const transcriptText = transcript
+            .map(t => `${t.role === 'user' ? 'USER' : 'GUIDE'}: ${t.text}`)
+            .join('\n\n');
+
+        const leadData = {
+            firstName,
+            email,
+            sessionId,
+            sessionTranscript: transcriptText,
+            workingHypothesis: '',
+            confirmedHypothesis: '',
+            detectedArchetype: 'Pending voice analysis',
+            tolerations: [],
+            patternData: {
+                threatThemes: [],
+                emotionalSignals: [],
+                adaptationMoves: [],
+                protectedNeeds: [],
+                coreBeliefs: [],
+                memoryWeights: [],
+            },
+            completedAt: new Date().toISOString(),
+        };
+
+        // Tag as session-completed so GHL drip workflow stops
+        await fetch('/api/submit-lead', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...leadData, tags: ['session-completed'] }),
+        });
+
+        const sessionStateForReport = {
+            phase: 'REPORT' as const,
+            phaseProgress: 100,
+            overallProgress: 100,
+            messages: transcript.map(t => ({
+                id: uuidv4(),
+                role: t.role,
+                content: t.text,
+                timestamp: t.timestamp,
+            })),
+            tolerations: [],
+            repeatingThemes: [],
+            firstHouseMemories: [],
+            patternData: leadData.patternData,
+            workingHypothesis: '',
+            confirmedHypothesis: '',
+            detectedArchetype: null,
+            confidenceScore: 0,
+            observationLogs: [],
+            leadCaptured: true,
+            leadData,
+            safetyTriggered: false,
+            sessionId,
+        };
+
+        let report: Record<string, string> | null = null;
+        try {
+            const reportRes = await fetch('/api/generate-report', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionState: sessionStateForReport, tier: reportTier }),
+            });
+            if (!reportRes.ok) throw new Error(`Report generation failed: ${reportRes.status}`);
+            const json = await reportRes.json();
+            report = json.report ?? null;
+        } catch (err) {
+            console.error('Report generation error:', err);
+        }
+
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('bop_report_a', JSON.stringify(report));
+            localStorage.setItem('bop_lead_data', JSON.stringify(leadData));
+            localStorage.setItem('bop_tier', String(tier));
+        }
+
+        if (report) {
+            try {
+                await fetch('/api/save-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email,
+                        firstName,
+                        sessionId,
+                        transcript: transcriptText,
+                        report,
+                        createdAt: new Date().toISOString(),
+                    }),
+                });
+            } catch (err) { console.warn('save-session failed:', err); }
+
+            if (tier === null) {
+                try {
+                    fetch('/api/fulfill-deep-dive', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ firstName, email, report }),
+                    });
+                } catch (err) { console.warn('fulfill-deep-dive trigger failed:', err); }
+            } else if (tier === 1) {
+                try {
+                    await fetch('/api/send-report', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ firstName, email, report, tier }),
+                    });
+                } catch (err) { console.warn('Email send failed:', err); }
+            }
+        }
+
+        if (typeof window !== 'undefined') {
+            if (tier === null) {
+                window.location.href = '/report';
+            } else {
+                const GHL_URLS: Record<number, string> = {
+                    1: process.env.NEXT_PUBLIC_GHL_URL_TIER1 || '/processing?tier=1',
+                    2: process.env.NEXT_PUBLIC_GHL_URL_TIER2 || '/processing?tier=2',
+                };
+                window.location.href = GHL_URLS[tier] || '/report';
+            }
+        }
+    }, [transcript, sessionId, selectedTier]);
+
     const checkEndOfSession = useCallback((text: string) => {
         const endPatterns = [
             /enter your name and email/i,
@@ -119,12 +267,12 @@ export default function VoiceInterface() {
                 const isPaid = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'paid';
                 if (isPaid) {
                     setShowPricing(true);
-                } else {
-                    setShowLeadCapture(true);
+                } else if (capturedEmail && capturedFirstName) {
+                    handleLeadSubmit(capturedFirstName, capturedEmail);
                 }
             }, 2000);
         }
-    }, []);
+    }, [capturedFirstName, capturedEmail, handleLeadSubmit]);
 
     const startCall = useCallback(async () => {
         try {
@@ -189,18 +337,9 @@ export default function VoiceInterface() {
             });
         });
 
-        vapi.on('speech-start', () => {
-            setCallState('ai-speaking');
-        });
-
-        vapi.on('speech-end', () => {
-            setCallState('active');
-            setVolumeLevel(0);
-        });
-
-        vapi.on('volume-level', (level: number) => {
-            setVolumeLevel(level);
-        });
+        vapi.on('speech-start', () => setCallState('ai-speaking'));
+        vapi.on('speech-end', () => { setCallState('active'); setVolumeLevel(0); });
+        vapi.on('volume-level', (level: number) => setVolumeLevel(level));
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         vapi.on('message', (message: any) => {
@@ -238,7 +377,7 @@ export default function VoiceInterface() {
                 });
                 return;
             }
-            setErrorMessage(`We encountered a connection error. Please try again.`);
+            setErrorMessage('We encountered a connection error. Please try again.');
             setCallState('idle');
             setHasStarted(false);
         });
@@ -259,6 +398,62 @@ export default function VoiceInterface() {
             setHasStarted(false);
         }
     }, [detectPhase, checkEndOfSession, checkDistress]);
+
+    const handleBeginClick = useCallback(() => {
+        if (emailCaptured) {
+            startCall();
+        } else {
+            setShowEarlyCapture(true);
+            setEarlyError('');
+        }
+    }, [emailCaptured, startCall]);
+
+    const handleEarlyCaptureSubmit = useCallback(async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!earlyName.trim() || !earlyEmail.trim()) {
+            setEarlyError('Please enter both your name and email.');
+            return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(earlyEmail)) {
+            setEarlyError('Please enter a valid email address.');
+            return;
+        }
+        setEarlySubmitting(true);
+
+        const fn = earlyName.trim();
+        const em = earlyEmail.trim();
+
+        setCapturedFirstName(fn);
+        setCapturedEmail(em);
+        setEmailCaptured(true);
+
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('captured_email', em);
+            localStorage.setItem('captured_firstName', fn);
+        }
+
+        // Tag as abandoned-visitor; if they finish the session, we tag session-completed afterward
+        try {
+            await fetch('/api/submit-lead', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName: fn,
+                    email: em,
+                    sessionId,
+                    sessionTranscript: '',
+                    completedAt: new Date().toISOString(),
+                    tags: ['abandoned-visitor'],
+                }),
+            });
+        } catch (err) {
+            console.warn('early submit-lead failed:', err);
+        }
+
+        setShowEarlyCapture(false);
+        setEarlySubmitting(false);
+        startCall();
+    }, [earlyName, earlyEmail, sessionId, startCall]);
 
     const handleTryAgain = useCallback(() => {
         setConnectionTimedOut(false);
@@ -282,136 +477,6 @@ export default function VoiceInterface() {
         }
     }, [isMuted]);
 
-    const handleLeadSubmit = useCallback(async (firstName: string, email: string) => {
-        const tier = selectedTier;
-        const reportTier = tier === 1 ? 1 : 2;
-        const transcriptText = transcript
-            .map(t => `${t.role === 'user' ? 'USER' : 'GUIDE'}: ${t.text}`)
-            .join('\n\n');
-
-        const leadData = {
-            firstName,
-            email,
-            sessionId,
-            sessionTranscript: transcriptText,
-            workingHypothesis: '',
-            confirmedHypothesis: '',
-            detectedArchetype: 'Pending voice analysis',
-            tolerations: [],
-            patternData: {
-                threatThemes: [],
-                emotionalSignals: [],
-                adaptationMoves: [],
-                protectedNeeds: [],
-                coreBeliefs: [],
-                memoryWeights: [],
-            },
-            completedAt: new Date().toISOString(),
-        };
-
-        await fetch('/api/submit-lead', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(leadData),
-        });
-
-        const sessionStateForReport = {
-            phase: 'REPORT' as const,
-            phaseProgress: 100,
-            overallProgress: 100,
-            messages: transcript.map(t => ({
-                id: uuidv4(),
-                role: t.role,
-                content: t.text,
-                timestamp: t.timestamp,
-            })),
-            tolerations: [],
-            repeatingThemes: [],
-            firstHouseMemories: [],
-            patternData: leadData.patternData,
-            workingHypothesis: '',
-            confirmedHypothesis: '',
-            detectedArchetype: null,
-            confidenceScore: 0,
-            observationLogs: [],
-            leadCaptured: true,
-            leadData,
-            safetyTriggered: false,
-            sessionId,
-        };
-
-        let report: Record<string, string> | null = null;
-        try {
-            const reportRes = await fetch('/api/generate-report', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionState: sessionStateForReport, tier: reportTier }),
-            });
-            if (!reportRes.ok) throw new Error(`Report generation failed: ${reportRes.status}`);
-            const json = await reportRes.json();
-            report = json.report ?? null;
-        } catch (err) {
-            console.error('Report generation error:', err);
-        }
-
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('bop_report_a', JSON.stringify(report));
-            localStorage.setItem('bop_lead_data', JSON.stringify(leadData));
-            localStorage.setItem('bop_tier', String(tier));
-        }
-
-        if (report) {
-            // Save session server-side so paid webhook can find it
-            try {
-                await fetch('/api/save-session', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        email,
-                        firstName,
-                        sessionId,
-                        transcript: transcriptText,
-                        report,
-                        createdAt: new Date().toISOString(),
-                    }),
-                });
-            } catch (err) { console.warn('save-session failed:', err); }
-
-            // Free flow (tier null) => trigger full Deep Dive fulfillment (audio + video + email)
-            // Paid Tier 1 => send First Light email
-            // Paid Tier 2 => skip; webhook will fulfill after payment
-            if (tier === null) {
-                try {
-                    fetch('/api/fulfill-deep-dive', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ firstName, email, report }),
-                    });
-                } catch (err) { console.warn('fulfill-deep-dive trigger failed:', err); }
-            } else if (tier === 1) {
-                try {
-                    await fetch('/api/send-report', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ firstName, email, report, tier }),
-                    });
-                } catch (err) { console.warn('Email send failed:', err); }
-            }
-        }
-
-        if (typeof window !== 'undefined') {
-            if (tier === null) {
-                window.location.href = '/report';
-            } else {
-                const GHL_URLS: Record<number, string> = {
-                    1: process.env.NEXT_PUBLIC_GHL_URL_TIER1 || '/processing?tier=1',
-                    2: process.env.NEXT_PUBLIC_GHL_URL_TIER2 || '/processing?tier=2',
-                };
-                window.location.href = GHL_URLS[tier] || '/report';
-            }
-        }
-    }, [transcript, sessionId, selectedTier]);
-
     const overallProgress = Math.round((currentPhaseIndex / (PHASE_LABELS.length - 1)) * 100);
 
     if (!hasStarted) {
@@ -432,12 +497,8 @@ export default function VoiceInterface() {
                         </div>
                     </div>
 
-                    <h1 className="text-4xl font-light text-white mb-3 tracking-tight">
-                        The Invisible Rule
-                    </h1>
-                    <p className="text-xl text-slate-400 mb-2">
-                        You keep starting over. But nothing changes.
-                    </p>
+                    <h1 className="text-4xl font-light text-white mb-3 tracking-tight">The Invisible Rule</h1>
+                    <p className="text-xl text-slate-400 mb-2">You keep starting over. But nothing changes.</p>
                     <p className="text-slate-500 mb-10 leading-relaxed max-w-md mx-auto">
                         A belief you have carried most of your life is still making your choices for you. And you have no idea it is there. This is your Invisible Rule.
                     </p>
@@ -464,10 +525,7 @@ export default function VoiceInterface() {
                             <p className="font-medium mb-1">Error</p>
                             <p>{errorMessage}</p>
                             {connectionTimedOut && (
-                                <button
-                                    onClick={handleTryAgain}
-                                    className="mt-3 px-4 py-2 bg-red-800/50 hover:bg-red-800 border border-red-600 rounded-lg text-red-200 text-sm transition-colors"
-                                >
+                                <button onClick={handleTryAgain} className="mt-3 px-4 py-2 bg-red-800/50 hover:bg-red-800 border border-red-600 rounded-lg text-red-200 text-sm transition-colors">
                                     Try Again
                                 </button>
                             )}
@@ -475,7 +533,7 @@ export default function VoiceInterface() {
                     )}
 
                     <button
-                        onClick={startCall}
+                        onClick={handleBeginClick}
                         className="w-full py-5 px-8 rounded-2xl text-slate-900 font-semibold text-lg transition-all duration-300 hover:scale-105 active:scale-95"
                         style={{
                             background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
@@ -489,6 +547,69 @@ export default function VoiceInterface() {
                         If you are in crisis, please contact a mental health professional.
                     </p>
                 </div>
+
+                {showEarlyCapture && (
+                    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+                        <div className="relative bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-8">
+                            <div className="text-center mb-6">
+                                <div className="w-12 h-12 bg-amber-500 rounded-full mx-auto mb-4 flex items-center justify-center">
+                                    <svg className="w-6 h-6 text-slate-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 11-8 0 4 4 0 018 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                                    </svg>
+                                </div>
+                                <h2 className="text-2xl font-light text-white mb-2">Before you begin</h2>
+                                <p className="text-slate-400 leading-relaxed">
+                                    Enter your name and email. After your voice session, your full Deep Dive (report, podcast, video, and slides) will arrive in your inbox in 10 to 15 minutes.
+                                </p>
+                            </div>
+
+                            <form onSubmit={handleEarlyCaptureSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-slate-300 text-sm mb-2">First Name</label>
+                                    <input
+                                        type="text"
+                                        value={earlyName}
+                                        onChange={e => setEarlyName(e.target.value)}
+                                        placeholder="Your first name"
+                                        className="w-full bg-slate-700 text-white placeholder-slate-400 border border-slate-600 rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500 transition-colors"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-slate-300 text-sm mb-2">Email Address</label>
+                                    <input
+                                        type="email"
+                                        value={earlyEmail}
+                                        onChange={e => setEarlyEmail(e.target.value)}
+                                        placeholder="your@email.com"
+                                        className="w-full bg-slate-700 text-white placeholder-slate-400 border border-slate-600 rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500 transition-colors"
+                                    />
+                                </div>
+
+                                {earlyError && <p className="text-red-400 text-sm">{earlyError}</p>}
+
+                                <button
+                                    type="submit"
+                                    disabled={earlySubmitting}
+                                    className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-900 font-semibold py-4 rounded-xl transition-all duration-200 hover:scale-105 disabled:hover:scale-100"
+                                >
+                                    {earlySubmitting ? 'Starting...' : 'Begin Voice Session'}
+                                </button>
+                                <p className="text-center text-slate-500 text-xs">
+                                    No spam. No selling your data.
+                                </p>
+                            </form>
+
+                            <button
+                                onClick={() => setShowEarlyCapture(false)}
+                                className="absolute top-4 right-4 text-slate-500 hover:text-slate-300"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }
@@ -525,18 +646,10 @@ export default function VoiceInterface() {
                 <VoiceOrb state={callState} volumeLevel={volumeLevel} />
 
                 <div className="mt-8 text-center">
-                    {callState === 'connecting' && (
-                        <p className="text-slate-400 text-lg animate-pulse">Connecting...</p>
-                    )}
-                    {callState === 'active' && (
-                        <p className="text-slate-500 text-base">Listening...</p>
-                    )}
-                    {callState === 'ai-speaking' && (
-                        <p className="text-amber-400/80 text-base">Speaking</p>
-                    )}
-                    {callState === 'user-speaking' && (
-                        <p className="text-blue-400/80 text-base">I&apos;m listening</p>
-                    )}
+                    {callState === 'connecting' && <p className="text-slate-400 text-lg animate-pulse">Connecting...</p>}
+                    {callState === 'active' && <p className="text-slate-500 text-base">Listening...</p>}
+                    {callState === 'ai-speaking' && <p className="text-amber-400/80 text-base">Speaking</p>}
+                    {callState === 'user-speaking' && <p className="text-blue-400/80 text-base">I&apos;m listening</p>}
                     {callState === 'ended' && (
                         <div className="text-center">
                             <p className="text-white text-lg mb-2">Session complete</p>
@@ -581,9 +694,7 @@ export default function VoiceInterface() {
                     <button
                         onClick={toggleMute}
                         className={`w-14 h-14 rounded-full border flex items-center justify-center transition-all ${
-                            isMuted
-                                ? 'bg-red-900/40 border-red-700 hover:bg-red-900/60'
-                                : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
+                            isMuted ? 'bg-red-900/40 border-red-700 hover:bg-red-900/60' : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
                         }`}
                         title={isMuted ? 'Unmute' : 'Mute'}
                     >
@@ -611,17 +722,10 @@ export default function VoiceInterface() {
                 </div>
             )}
 
-            {callState === 'ended' && !showPricing && !showLeadCapture && (
+            {callState === 'ended' && !showPricing && capturedEmail && capturedFirstName && (
                 <div className="pb-12 flex flex-col items-center gap-4">
                     <button
-                        onClick={() => {
-                            const isPaid = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'paid';
-                            if (isPaid) {
-                                setShowPricing(true);
-                            } else {
-                                setShowLeadCapture(true);
-                            }
-                        }}
+                        onClick={() => handleLeadSubmit(capturedFirstName, capturedEmail)}
                         className="px-8 py-4 rounded-xl font-semibold text-slate-900 transition-all hover:scale-105 active:scale-95"
                         style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', boxShadow: '0 8px 32px rgba(245,158,11,0.3)' }}
                     >
@@ -636,17 +740,7 @@ export default function VoiceInterface() {
                 </div>
             )}
 
-            {showLeadCapture && (
-                <LeadCaptureModal
-                    onSubmit={handleLeadSubmit}
-                    onClose={() => setShowLeadCapture(false)}
-                    tier={selectedTier ?? undefined}
-                />
-            )}
-
-            {showSafety && (
-                <SafetyModal onClose={() => setShowSafety(false)} />
-            )}
+            {showSafety && <SafetyModal onClose={() => setShowSafety(false)} />}
 
             {showPricing && (
                 <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -654,7 +748,10 @@ export default function VoiceInterface() {
                         onSelectTier={(tier) => {
                             setSelectedTier(tier);
                             setShowPricing(false);
-                            setShowLeadCapture(true);
+                            // Email already captured early; submit now
+                            if (capturedEmail && capturedFirstName) {
+                                handleLeadSubmit(capturedFirstName, capturedEmail);
+                            }
                         }}
                     />
                 </div>
