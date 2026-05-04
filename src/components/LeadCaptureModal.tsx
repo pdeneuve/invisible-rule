@@ -3,15 +3,14 @@
 import { useState } from 'react';
 
 const TIER_NAMES: Record<number, string> = {
-  1: 'First Light — $9.97',
-  2: 'The Blueprint — $29.97',
-  3: 'The Deep Dive — $97',
+  1: 'First Light — $7',
+  2: 'The Deep Dive — $97',
 };
 
 interface Props {
   onSubmit: (firstName: string, email: string) => void;
   onClose: () => void;
-  tier?: 1 | 2 | 3;
+  tier?: 1 | 2;
 }
 
 export default function LeadCaptureModal({ onSubmit, onClose, tier }: Props) {
@@ -34,6 +33,44 @@ export default function LeadCaptureModal({ onSubmit, onClose, tier }: Props) {
     await onSubmit(firstName.trim(), email.trim());
   };
 
+  // Decide messaging based on tier
+  const isFree = !tier;
+  const isFirstLight = tier === 1;
+  const isDeepDive = tier === 2;
+
+  let headline = 'Almost there';
+  let subtext = '';
+  let buttonText = 'Continue';
+  let bullets: string[] = [];
+
+  if (isFree) {
+    subtext = 'Enter your name and email. Your full Deep Dive will arrive in your inbox within 10 to 15 minutes.';
+    buttonText = 'Send My Deep Dive';
+    bullets = [
+      'Your written Invisible Rule report',
+      'A personalized podcast in Pamela\'s voice',
+      'A cinematic video walking you through your pattern',
+      'A branded slide deck of your key insights',
+    ];
+  } else if (isFirstLight) {
+    subtext = 'Enter your name and email. After payment, your First Light report will arrive in your inbox within 10 to 15 minutes.';
+    buttonText = 'Continue to Payment';
+    bullets = [
+      'Your Invisible Rule, stated clearly',
+      'The one core insight that changes everything',
+      'Delivered to your inbox',
+    ];
+  } else if (isDeepDive) {
+    subtext = 'Enter your name and email. After payment, your full Deep Dive will arrive in your inbox within 10 to 15 minutes.';
+    buttonText = 'Continue to Payment';
+    bullets = [
+      'Your full multi-section Invisible Rule report',
+      'A personalized podcast in Pamela\'s voice',
+      'A cinematic video walking you through your pattern',
+      'A branded slide deck of your key insights',
+    ];
+  }
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
       <div className="relative bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-8">
@@ -43,32 +80,25 @@ export default function LeadCaptureModal({ onSubmit, onClose, tier }: Props) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           </div>
-          <h2 className="text-2xl font-light text-white mb-2">Almost there</h2>
+          <h2 className="text-2xl font-light text-white mb-2">{headline}</h2>
           {tier && (
             <div className="inline-block bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-1 mb-2">
               <span className="text-amber-400 text-sm font-medium">{TIER_NAMES[tier]}</span>
             </div>
           )}
-          <p className="text-slate-400 leading-relaxed">
-            Enter your name and email to continue to payment and receive your report.
-          </p>
+          <p className="text-slate-400 leading-relaxed">{subtext}</p>
         </div>
 
         <div className="bg-slate-700/50 rounded-xl p-4 mb-6">
-          <div className="flex items-start gap-3 mb-3">
-            <span className="text-amber-500 font-bold text-sm mt-0.5">FREE</span>
-            <div>
-              <p className="text-white font-medium text-sm">Core Insight Report</p>
-              <p className="text-slate-400 text-sm">Your BOP statement, evidence, and next steps — delivered immediately</p>
-            </div>
-          </div>
-          <div className="border-t border-slate-600 pt-3 flex items-start gap-3">
-            <span className="text-amber-400 font-bold text-sm mt-0.5">+</span>
-            <div>
-              <p className="text-white font-medium text-sm">Expanded Transformation Dossier</p>
-              <p className="text-slate-400 text-sm">12–15 page deep analysis: archetype breakdown, 30-day counter-strategy, new operating principle, and full integration roadmap — sent to your inbox</p>
-            </div>
-          </div>
+          <p className="text-amber-400 text-xs font-semibold uppercase tracking-widest mb-3">What you receive</p>
+          <ul className="space-y-2">
+            {bullets.map((b, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                <span className="text-amber-400 mt-0.5">&#10003;</span>
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -100,10 +130,10 @@ export default function LeadCaptureModal({ onSubmit, onClose, tier }: Props) {
             disabled={isSubmitting}
             className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-900 font-semibold py-4 rounded-xl transition-all duration-200 hover:scale-105 disabled:hover:scale-100"
           >
-            {isSubmitting ? 'Generating your report...' : 'Get My Reports'}
+            {isSubmitting ? 'Preparing your report...' : buttonText}
           </button>
           <p className="text-center text-slate-500 text-xs">
-            No spam. No selling your data. Just your report.
+            No spam. No selling your data.
           </p>
         </form>
 
