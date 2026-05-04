@@ -1,12 +1,8 @@
 /**
  * Deep Dive Fulfillment Orchestrator
  *
- * Generates the full Deep Dive package (report + podcast audio + video render submission)
+ * Generates the full Deep Dive package (report + podcast audio + slides + video)
  * and emails it to the user with all assets.
- *
- * Called by:
- *   - Free flow: VoiceInterface after lead capture (tier null)
- *   - Paid flow: ghl-webhook after Tier 2 payment
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -51,6 +47,34 @@ async function generateAndUploadAudio(
   }
 }
 
+async function generateAndUploadSlides(
+  report: Record<string, string>,
+  firstName: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(`${appUrl()}/api/generate-slides`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ report, firstName }),
+    });
+    if (!res.ok) {
+      console.error('generate-slides failed:', res.status, await res.text());
+      return null;
+    }
+    const { slides } = await res.json();
+    if (!slides) return null;
+    const filename = `slides/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`;
+    const blob = await put(filename, JSON.stringify({ slides, firstName }), {
+      access: 'public',
+      contentType: 'application/json',
+    });
+    return `${appUrl()}/slides?url=${encodeURIComponent(blob.url)}`;
+  } catch (err) {
+    console.error('generateAndUploadSlides error:', err);
+    return null;
+  }
+}
+
 async function submitVideoRender(
   report: Record<string, string>,
   firstName: string
@@ -78,7 +102,8 @@ async function sendEmail(
   email: string,
   report: Record<string, string>,
   audioUrl: string | null,
-  videoUrl: string | null
+  videoUrl: string | null,
+  slidesUrl: string | null
 ): Promise<boolean> {
   try {
     const res = await fetch(`${appUrl()}/api/send-report`, {
@@ -91,6 +116,7 @@ async function sendEmail(
         tier: 2,
         audioUrl: audioUrl || undefined,
         videoUrl: videoUrl || undefined,
+        slidesUrl: slidesUrl || undefined,
       }),
     });
     if (!res.ok) {
@@ -112,20 +138,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing email or report' }, { status: 400 });
     }
 
-    const [audioUrl, videoRenderId] = await Promise.all([
+    const [audioUrl, videoRenderId, slidesUrl] = await Promise.all([
       generateAndUploadAudio(report, firstName),
       submitVideoRender(report, firstName),
+      generateAndUploadSlides(report, firstName),
     ]);
 
     const videoStatusUrl = videoRenderId ? `${appUrl()}/video/${videoRenderId}` : null;
 
-    const emailed = await sendEmail(firstName, email, report, audioUrl, videoStatusUrl);
+    const emailed = await sendEmail(firstName, email, report, audioUrl, videoStatusUrl, slidesUrl);
 
     return NextResponse.json({
       success: true,
       audioUrl,
       videoRenderId,
       videoStatusUrl,
+      slidesUrl,
       emailed,
     });
   } catch (err) {
