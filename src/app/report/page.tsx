@@ -59,13 +59,13 @@ function ReportContent() {
     );
   }
 
-  // Tier 2 (Deep Dive $97) gets the full DeepDiveDisplay with all assets
-  if (tier === 2) {
-    return <DeepDiveDisplay report={report} firstName={firstName} />;
+  // Tier 1 (paid First Light $7) gets the short FirstLightDisplay
+  if (tier === 1) {
+    return <FirstLightDisplay report={report} firstName={firstName} />;
   }
 
-  // Free users (tier null) and Tier 1 (First Light $7) both get FirstLightDisplay
-  return <FirstLightDisplay report={report} firstName={firstName} />;
+  // Free users (no tier) and Tier 2 paid Deep Dive both get the full DeepDiveDisplay
+  return <DeepDiveDisplay report={report} firstName={firstName} />;
 }
 
 export default function ReportPage() {
