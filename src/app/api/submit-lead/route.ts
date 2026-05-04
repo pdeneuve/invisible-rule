@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LeadData } from '@/lib/types';
 
+interface SubmitLeadBody extends Partial<LeadData> {
+  tags?: string[];
+}
+
 export async function POST(req: NextRequest) {
-  const leadData: LeadData = await req.json();
+  const body: SubmitLeadBody = await req.json();
 
   const webhookUrl = process.env.WEBHOOK_URL;
   if (!webhookUrl) {
@@ -15,16 +19,17 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        firstName: leadData.firstName,
-        email: leadData.email,
-        sessionId: leadData.sessionId,
-        sessionTranscript: leadData.sessionTranscript,
-        workingHypothesis: leadData.workingHypothesis,
-        confirmedHypothesis: leadData.confirmedHypothesis,
-        detectedArchetype: leadData.detectedArchetype,
-        tolerations: leadData.tolerations,
-        patternData: leadData.patternData,
-        completedAt: leadData.completedAt,
+        firstName: body.firstName,
+        email: body.email,
+        sessionId: body.sessionId,
+        sessionTranscript: body.sessionTranscript,
+        workingHypothesis: body.workingHypothesis,
+        confirmedHypothesis: body.confirmedHypothesis,
+        detectedArchetype: body.detectedArchetype,
+        tolerations: body.tolerations,
+        patternData: body.patternData,
+        completedAt: body.completedAt,
+        tags: body.tags || [],
         source: 'invisible-rule-app',
       }),
     });
