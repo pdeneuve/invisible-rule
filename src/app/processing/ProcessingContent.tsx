@@ -66,8 +66,11 @@ export default function ProcessingContent() {
     );
   }
 
-  if (tier === 2) {
-    return <DeepDiveDisplay report={report} firstName={firstName} />;
+  // Tier 1 (paid First Light $7) gets the short FirstLightDisplay
+  if (tier === 1) {
+    return <FirstLightDisplay report={report} firstName={firstName} />;
   }
-  return <FirstLightDisplay report={report} firstName={firstName} />;
+
+  // Free users (no tier) and Tier 2 paid Deep Dive both get the full DeepDiveDisplay
+  return <DeepDiveDisplay report={report} firstName={firstName} />;
 }
