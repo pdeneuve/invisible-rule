@@ -225,7 +225,7 @@ export default function VoiceInterface() {
 
             if (tier === null) {
                 try {
-                    fetch('/api/fulfill-deep-dive', {
+                   await fetch('/api/fulfill-deep-dive', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ firstName, email, report }),
