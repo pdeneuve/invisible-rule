@@ -54,23 +54,6 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
           </div>
         )}
 
-        <div
-          className="mt-8 rounded-2xl p-8 text-center"
-          style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(51,65,85,0.6)' }}
-        >
-          <p className="text-white font-medium mb-2">Want the full picture?</p>
-          <p className="text-slate-400 text-sm leading-relaxed mb-6 max-w-md mx-auto">
-            The Blueprint maps every layer - the evidence, what it protected, what it costs today, and your path forward.
-          </p>
-          <a
-            href={process.env.NEXT_PUBLIC_GHL_URL_TIER2 || '/'}
-            className="inline-block px-8 py-3.5 rounded-xl font-semibold text-slate-900 transition-all hover:scale-105"
-            style={{ background: 'linear-gradient(135deg,#fbbf24,#f59e0b)' }}
-          >
-            Upgrade to The Blueprint - $27
-          </a>
-        </div>
-
         <div className="flex gap-3 mt-8">
           <button
             onClick={() => window.print()}
