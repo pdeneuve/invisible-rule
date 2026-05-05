@@ -42,7 +42,7 @@ export default function VoiceInterface() {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [connectionTimedOut, setConnectionTimedOut] = useState(false);
 
-    // Email captured before voice session starts
+    // Email captured before voice session
     const [emailCaptured, setEmailCaptured] = useState(false);
     const [capturedFirstName, setCapturedFirstName] = useState('');
     const [capturedEmail, setCapturedEmail] = useState('');
@@ -57,8 +57,9 @@ export default function VoiceInterface() {
     const durationRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const callStartTimeRef = useRef<number | null>(null);
     const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Submit-lock so fulfillment never runs more than once per session
+    const hasSubmittedRef = useRef(false);
 
-    // Restore captured email from localStorage if present
     useEffect(() => {
         if (typeof window === 'undefined') return;
         const ce = localStorage.getItem('captured_email');
@@ -129,8 +130,12 @@ export default function VoiceInterface() {
     }, []);
 
     const handleLeadSubmit = useCallback(async (firstName: string, email: string) => {
+        // Prevent duplicate submissions
+        if (hasSubmittedRef.current) return;
+        hasSubmittedRef.current = true;
+
         const tier = selectedTier;
-        const reportTier = tier === 1 ? 1 : 2;
+        const reportTier: 1 | 2 = tier === 1 ? 1 : 2;
         const transcriptText = transcript
             .map(t => `${t.role === 'user' ? 'USER' : 'GUIDE'}: ${t.text}`)
             .join('\n\n');
@@ -155,12 +160,14 @@ export default function VoiceInterface() {
             completedAt: new Date().toISOString(),
         };
 
-        // Tag as session-completed so GHL drip workflow stops
-        await fetch('/api/submit-lead', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...leadData, tags: ['session-completed'] }),
-        });
+        // Tag as session-completed (stops the abandoned-visitor drip)
+        try {
+            await fetch('/api/submit-lead', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...leadData, tags: ['session-completed'] }),
+            });
+        } catch (err) { console.warn('submit-lead failed:', err); }
 
         const sessionStateForReport = {
             phase: 'REPORT' as const,
@@ -224,11 +231,13 @@ export default function VoiceInterface() {
             } catch (err) { console.warn('save-session failed:', err); }
 
             if (tier === null) {
+                // Use keepalive so the request survives the page redirect
                 try {
-                   await fetch('/api/fulfill-deep-dive', {
+                    fetch('/api/fulfill-deep-dive', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ firstName, email, report }),
+                        keepalive: true,
                     });
                 } catch (err) { console.warn('fulfill-deep-dive trigger failed:', err); }
             } else if (tier === 1) {
@@ -255,24 +264,19 @@ export default function VoiceInterface() {
         }
     }, [transcript, sessionId, selectedTier]);
 
-    const checkEndOfSession = useCallback((text: string) => {
-        const endPatterns = [
-            /enter your name and email/i,
-            /core insight report/i,
-            /on the screen in front of you/i,
-            /your guide will send/i,
-        ];
-        if (endPatterns.some(p => p.test(text))) {
-            setTimeout(() => {
-                const isPaid = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'paid';
-                if (isPaid) {
-                    setShowPricing(true);
-                } else if (capturedEmail && capturedFirstName) {
-                    handleLeadSubmit(capturedFirstName, capturedEmail);
-                }
-            }, 2000);
+    // Auto-trigger submission ONCE when voice ends - replaces the manual button
+    useEffect(() => {
+        if (callState !== 'ended') return;
+        if (hasSubmittedRef.current) return;
+        if (!capturedEmail || !capturedFirstName) return;
+
+        const isPaid = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'paid';
+        if (isPaid) {
+            setShowPricing(true);
+        } else {
+            handleLeadSubmit(capturedFirstName, capturedEmail);
         }
-    }, [capturedFirstName, capturedEmail, handleLeadSubmit]);
+    }, [callState, capturedEmail, capturedFirstName, handleLeadSubmit]);
 
     const startCall = useCallback(async () => {
         try {
@@ -288,6 +292,9 @@ export default function VoiceInterface() {
             sessionStorage.removeItem('bop_report_a');
             sessionStorage.removeItem('bop_lead_data');
         }
+
+        // Reset submit lock for a fresh session
+        hasSubmittedRef.current = false;
 
         setHasStarted(true);
         setErrorMessage(null);
@@ -349,7 +356,6 @@ export default function VoiceInterface() {
                 setTranscript(prev => [...prev, { role, text, timestamp: new Date() }]);
                 if (role === 'assistant') {
                     detectPhase(text);
-                    checkEndOfSession(text);
                 }
                 if (role === 'user') {
                     checkDistress(text);
@@ -397,7 +403,7 @@ export default function VoiceInterface() {
             setCallState('idle');
             setHasStarted(false);
         }
-    }, [detectPhase, checkEndOfSession, checkDistress]);
+    }, [detectPhase, checkDistress]);
 
     const handleBeginClick = useCallback(() => {
         if (emailCaptured) {
@@ -432,7 +438,6 @@ export default function VoiceInterface() {
             localStorage.setItem('captured_firstName', fn);
         }
 
-        // Tag as abandoned-visitor; if they finish the session, we tag session-completed afterward
         try {
             await fetch('/api/submit-lead', {
                 method: 'POST',
@@ -509,7 +514,7 @@ export default function VoiceInterface() {
                             {[
                                 ['\uD83C\uDFA4\uFE0F', 'A guided voice conversation - one question at a time'],
                                 ['\u23F1\uFE0F', '30 to 60 minutes to complete the full process'],
-                                ['\uD83D\uDCC4', 'A Deep Dive Report - delivered after your session'],
+                                ['\uD83D\uDCC4', 'A Deep Dive Report - delivered to your email'],
                                 ['\uD83D\uDD12', 'Private, confidential, and judgment-free'],
                             ].map(([icon, text]) => (
                                 <li key={text} className="flex items-start gap-3 text-slate-300">
@@ -559,7 +564,7 @@ export default function VoiceInterface() {
                                 </div>
                                 <h2 className="text-2xl font-light text-white mb-2">Before you begin</h2>
                                 <p className="text-slate-400 leading-relaxed">
-                                    Enter your name and email. After your voice session, your full Deep Dive (report, podcast, video, and slides) will arrive in your inbox in 10 to 15 minutes.
+                                    Enter your name and email. After your voice session, your full Deep Dive (report, podcast, video, and slides) will arrive in your inbox in about 10 minutes.
                                 </p>
                             </div>
 
@@ -643,22 +648,34 @@ export default function VoiceInterface() {
             </div>
 
             <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
-                <VoiceOrb state={callState} volumeLevel={volumeLevel} />
+                {callState !== 'ended' && <VoiceOrb state={callState} volumeLevel={volumeLevel} />}
 
-                <div className="mt-8 text-center">
+                <div className="mt-8 text-center max-w-xl">
                     {callState === 'connecting' && <p className="text-slate-400 text-lg animate-pulse">Connecting...</p>}
                     {callState === 'active' && <p className="text-slate-500 text-base">Listening...</p>}
                     {callState === 'ai-speaking' && <p className="text-amber-400/80 text-base">Speaking</p>}
                     {callState === 'user-speaking' && <p className="text-blue-400/80 text-base">I&apos;m listening</p>}
-                    {callState === 'ended' && (
-                        <div className="text-center">
-                            <p className="text-white text-lg mb-2">Session complete</p>
-                            <p className="text-slate-400 text-sm">Your report is being prepared</p>
+                    {callState === 'ended' && !showPricing && (
+                        <div className="text-center px-4">
+                            <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center"
+                                style={{ background: 'radial-gradient(circle at 40% 40%, #fbbf24, #d97706)' }}>
+                                <div className="w-8 h-8 border-2 border-slate-900/60 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                            <h2 className="text-3xl md:text-4xl font-light text-white mb-4 tracking-tight">
+                                Your Deep Dive is being prepared...
+                            </h2>
+                            <p className="text-slate-300 text-lg leading-relaxed mb-3">
+                                This takes about 10 minutes.
+                            </p>
+                            <p className="text-slate-400 text-base leading-relaxed max-w-md mx-auto">
+                                Check your email for your full Deep Dive — report, podcast, video, and slides.
+                                You can close this window. Everything will be sent to <span className="text-amber-400">{capturedEmail}</span>.
+                            </p>
                         </div>
                     )}
                 </div>
 
-                {showTranscript && transcript.length > 0 && (
+                {showTranscript && transcript.length > 0 && callState !== 'ended' && (
                     <div
                         ref={transcriptRef}
                         className="mt-8 w-full max-w-lg h-48 overflow-y-auto bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-2"
@@ -722,24 +739,6 @@ export default function VoiceInterface() {
                 </div>
             )}
 
-            {callState === 'ended' && !showPricing && capturedEmail && capturedFirstName && (
-                <div className="pb-12 flex flex-col items-center gap-4">
-                    <button
-                        onClick={() => handleLeadSubmit(capturedFirstName, capturedEmail)}
-                        className="px-8 py-4 rounded-xl font-semibold text-slate-900 transition-all hover:scale-105 active:scale-95"
-                        style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', boxShadow: '0 8px 32px rgba(245,158,11,0.3)' }}
-                    >
-                        Get Your Report
-                    </button>
-                    <button
-                        onClick={() => window.location.reload()}
-                        className="text-slate-500 hover:text-slate-400 text-sm transition-colors"
-                    >
-                        Start a new session
-                    </button>
-                </div>
-            )}
-
             {showSafety && <SafetyModal onClose={() => setShowSafety(false)} />}
 
             {showPricing && (
@@ -748,7 +747,6 @@ export default function VoiceInterface() {
                         onSelectTier={(tier) => {
                             setSelectedTier(tier);
                             setShowPricing(false);
-                            // Email already captured early; submit now
                             if (capturedEmail && capturedFirstName) {
                                 handleLeadSubmit(capturedFirstName, capturedEmail);
                             }
