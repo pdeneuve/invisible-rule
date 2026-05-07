@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { saveProgress, loadProgress } from '@/lib/mastery-progress';
 
 function Chapter1Content() {
   const router = useRouter();
@@ -8,27 +9,56 @@ function Chapter1Content() {
   const [tols, setTols] = useState(['', '', '']);
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [returning, setReturning] = useState(false);
 
   useEffect(() => {
-    const nameParam = searchParams.get('name') || '';
-    const emailParam = searchParams.get('email') || '';
-    if (nameParam) setUserName(nameParam);
-    if (emailParam) setUserEmail(emailParam);
-    // Save to localStorage so all chapters can access it
-    if (nameParam) localStorage.setItem('mastery_user_name', nameParam);
-    if (emailParam) localStorage.setItem('mastery_user_email', emailParam);
+    const init = async () => {
+      const nameParam = searchParams.get('name') || '';
+      const emailParam = searchParams.get('email') || '';
+
+      // Save to localStorage
+      if (nameParam) { localStorage.setItem('mastery_user_name', nameParam); setUserName(nameParam); }
+      if (emailParam) { localStorage.setItem('mastery_user_email', emailParam); setUserEmail(emailParam); }
+
+      // Try to load saved name/email from localStorage if not in URL
+      const storedName = nameParam || localStorage.getItem('mastery_user_name') || '';
+      const storedEmail = emailParam || localStorage.getItem('mastery_user_email') || '';
+      if (storedName) setUserName(storedName);
+      if (storedEmail) setUserEmail(storedEmail);
+
+      // Load existing progress from backend
+      if (storedEmail) {
+        const saved = await loadProgress(storedEmail);
+        if (saved?.ch1_tolerations) {
+          setTols(saved.ch1_tolerations as string[]);
+          setReturning(true);
+        } else {
+          // Fall back to localStorage
+          const local = localStorage.getItem('mastery_ch1_tolerations');
+          if (local) { setTols(JSON.parse(local)); setReturning(true); }
+        }
+      } else {
+        const local = localStorage.getItem('mastery_ch1_tolerations');
+        if (local) { setTols(JSON.parse(local)); setReturning(true); }
+      }
+      setLoading(false);
+    };
+    init();
   }, [searchParams]);
 
   const update = (i: number, val: string) => {
     const next = [...tols]; next[i] = val; setTols(next);
   };
 
-  const canContinue = tols.every(t => t.trim().length > 0);
+  const canContinue = !loading && tols.every(t => t.trim().length > 0);
 
-  const handleContinue = () => {
-    localStorage.setItem('mastery_ch1_tolerations', JSON.stringify(tols));
+  const handleContinue = async () => {
+    await saveProgress('ch1_tolerations', tols);
     router.push('/mastery/workbook/ch2');
   };
+
+  if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center"><div className="text-slate-400">Loading your workbook...</div></div>;
 
   return (
     <div className="min-h-screen bg-slate-900 text-white px-6 py-10 max-w-2xl mx-auto">
@@ -39,7 +69,9 @@ function Chapter1Content() {
       </div>
 
       {userName && (
-        <p className="text-amber-400 text-sm mb-4">Welcome, {userName}. Let's begin your workbook.</p>
+        <p className="text-amber-400 text-sm mb-2">
+          {returning ? `Welcome back, ${userName}.` : `Welcome, ${userName}. Let's begin your workbook.`}
+        </p>
       )}
 
       <p className="text-amber-400 text-sm font-semibold tracking-widest uppercase mb-2">Chapter 1</p>
@@ -74,7 +106,7 @@ function Chapter1Content() {
               onChange={e => update(i, e.target.value)}
               placeholder="Write honestly — do not soften this..."
               rows={3}
-              className={`w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 resize-none focus:outline-none focus:border-amber-400 transition-colors`}
+              className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 resize-none focus:outline-none focus:border-amber-400 transition-colors"
             />
           </div>
         ))}
@@ -93,7 +125,6 @@ function Chapter1Content() {
       >
         Continue to Chapter 2 →
       </button>
-
       <a href="/mastery" className="block text-center text-slate-500 text-sm mt-4 hover:text-slate-400">← Back to Mastery home</a>
     </div>
   );

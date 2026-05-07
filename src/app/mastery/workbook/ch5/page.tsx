@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { saveProgress } from '@/lib/mastery-progress';
 import { useRouter } from 'next/navigation';
 
 type Goal = { statement: string; why: string; lifeFeeling: string };
@@ -27,10 +28,12 @@ export default function Chapter5() {
 
   const canContinue = goals.every(g => g.statement.trim().length > 0) && commitment.willing.trim().length > 0;
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     const allGoals = goals.map(g => g.statement);
-    localStorage.setItem('mastery_ch5', JSON.stringify({ changed, goals, commitment, finalReflection }));
     localStorage.setItem('mastery_goals', JSON.stringify(allGoals));
+    const ch5Data = { changed, goals, commitment, finalReflection };
+    await saveProgress('ch5', ch5Data);
+    await saveProgress('goals', allGoals);
     router.push('/mastery/weekly');
   };
 
@@ -50,7 +53,7 @@ export default function Chapter5() {
       {/* Step 1: Come back to tolerations */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold mb-4">Step 1: Come Back to Your Tolerations</h2>
-        <p className="text-slate-400 mb-4">These are not just situations. These are patterns you have been living with. Read them again slowly — and let them feel real.</p>
+        <p className="text-slate-400 mb-4">These are not just situations. These are patterns you have been living with. Read them again slowly â and let them feel real.</p>
         <div className="space-y-3">
           {tols.map((t, i) => (
             <div key={i} className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/50">
@@ -64,7 +67,7 @@ export default function Chapter5() {
       {/* Step 2: Fully changed */}
       <div className="border-t border-slate-700 pt-8 mb-8">
         <h2 className="text-xl font-semibold mb-4">Step 2: If This Were Fully Changed</h2>
-        <p className="text-slate-400 mb-6">Imagine each toleration is completely different. Not improved a little — fully changed.</p>
+        <p className="text-slate-400 mb-6">Imagine each toleration is completely different. Not improved a little â fully changed.</p>
         <div className="space-y-6">
           {tols.map((t, i) => (
             <div key={i} className="bg-slate-800/40 rounded-2xl p-5 border border-slate-700/30">
@@ -89,7 +92,7 @@ export default function Chapter5() {
       {/* Step 3: Goals */}
       <div className="border-t border-slate-700 pt-8 mb-8">
         <h2 className="text-xl font-semibold mb-4">Step 3: Your 3 Goals for the Next 26 Weeks</h2>
-        <p className="text-slate-400 mb-6">Turn each toleration into a clear goal. Write it in a way that reflects how you want to live — not what you want to avoid. You are choosing to change how you show up.</p>
+        <p className="text-slate-400 mb-6">Turn each toleration into a clear goal. Write it in a way that reflects how you want to live â not what you want to avoid. You are choosing to change how you show up.</p>
         <div className="space-y-6">
           {[0,1,2].map(i => (
             <div key={i} className="bg-slate-800/40 rounded-2xl p-5 border border-slate-700/30">
@@ -171,9 +174,9 @@ export default function Chapter5() {
         disabled={!canContinue}
         className={`w-full py-4 rounded-2xl font-bold text-lg transition-all ${canContinue ? 'bg-amber-400 text-slate-900 hover:bg-amber-300' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}`}
       >
-        Begin My Weekly Accountability →
+        Begin My Weekly Accountability â
       </button>
-      <a href="/mastery/workbook/ch4" className="block text-center text-slate-500 text-sm mt-4 hover:text-slate-400">← Back to Chapter 4</a>
+      <a href="/mastery/workbook/ch4" className="block text-center text-slate-500 text-sm mt-4 hover:text-slate-400">â Back to Chapter 4</a>
     </div>
   );
 }

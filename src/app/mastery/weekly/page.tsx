@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { saveProgress } from '@/lib/mastery-progress';
 
 function WeeklyContent() {
   const router = useRouter();
@@ -55,11 +56,13 @@ function WeeklyContent() {
     setAiLoading(false);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const entries = JSON.parse(localStorage.getItem('mastery_entries') || '[]');
     entries.push({ week, form, email, timestamp: new Date().toISOString() });
     localStorage.setItem('mastery_entries', JSON.stringify(entries));
     localStorage.setItem('mastery_week', String(week + 1));
+    await saveProgress('weekly_sessions', entries);
+    await saveProgress('current_week', week + 1);
     setSubmitted(true);
   };
 
@@ -93,7 +96,7 @@ function WeeklyContent() {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm text-center">
-          <div className="text-6xl mb-6">✨</div>
+          <div className="text-6xl mb-6">â¨</div>
           <h2 className="text-3xl font-light text-white mb-4">Week {week} Complete</h2>
           <p className="text-slate-400 mb-8">You showed up. That is the work.</p>
           {week < 26 ? (
@@ -102,7 +105,7 @@ function WeeklyContent() {
               className="w-full py-4 rounded-2xl text-slate-900 font-semibold text-base mb-4"
               style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', boxShadow: '0 8px 32px rgba(245,158,11,0.3)' }}
             >
-              Continue to Week {week + 1} →
+              Continue to Week {week + 1} â
             </button>
           ) : (
             <div className="bg-amber-500/20 rounded-2xl p-6 border border-amber-500/40">
@@ -133,7 +136,7 @@ function WeeklyContent() {
           <div className="bg-slate-800/60 rounded-xl p-4 mb-6 border border-slate-700">
             <p className="text-amber-400 text-xs uppercase tracking-widest mb-2">Your 3 Goals</p>
             {goals.filter(g => g).map((g, i) => (
-              <p key={i} className="text-slate-300 text-sm mb-1">• {g}</p>
+              <p key={i} className="text-slate-300 text-sm mb-1">â¢ {g}</p>
             ))}
           </div>
         )}
@@ -150,7 +153,7 @@ function WeeklyContent() {
             disabled={aiLoading}
             className="mt-3 text-amber-400 text-sm hover:text-amber-300 transition-colors disabled:opacity-50"
           >
-            {aiLoading ? 'Pamela is thinking...' : '✨ Ask Pamela'}
+            {aiLoading ? 'Pamela is thinking...' : 'â¨ Ask Pamela'}
           </button>
         </div>
 
@@ -182,7 +185,7 @@ function WeeklyContent() {
           className="w-full py-4 rounded-2xl text-slate-900 font-semibold text-base transition-all duration-300 hover:scale-105 active:scale-95"
           style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', boxShadow: '0 8px 32px rgba(245,158,11,0.3)' }}
         >
-          Complete Week {week} ✓
+          Complete Week {week} â
         </button>
       </div>
     </div>

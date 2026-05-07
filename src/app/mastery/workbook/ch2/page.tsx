@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { saveProgress } from '@/lib/mastery-progress';
 
 export default function Chapter2() {
   const router = useRouter();
@@ -23,8 +24,9 @@ export default function Chapter2() {
 
   const canContinue = iVersion.every(v => v.trim()) && respVersion.every(v => v.trim()) && pattern.trim() && patternPurpose.trim();
 
-  const handleContinue = () => {
-    localStorage.setItem('mastery_ch2', JSON.stringify({ iVersion, respVersion, pattern, realMoment, bodyExp, patternPurpose }));
+  const handleContinue = async () => {
+    const ch2Data = { iVersion, respVersion, pattern, realMoment, bodyExp, patternPurpose };
+    await saveProgress('ch2', ch2Data);
     router.push('/mastery/workbook/ch3');
   };
 
@@ -43,9 +45,9 @@ export default function Chapter2() {
       </p>
 
       <div className="bg-slate-800/60 rounded-2xl p-6 mb-8 border border-slate-700/50">
-        <p className="text-sm text-amber-300 font-semibold mb-1">Story – Michelle, 61</p>
+        <p className="text-sm text-amber-300 font-semibold mb-1">Story â Michelle, 61</p>
         <p className="text-slate-300 text-sm leading-relaxed">
-          Michelle wrote that her son spoke to her with disrespect. Then she remembered the last time it happened. He raised his voice, and she felt her body react. She wanted to say something, but she did not. She looked down, changed the subject, and stayed in the conversation. That was when she saw it — her toleration included what she did in that moment. She stayed silent. She allowed it to continue. When she saw that clearly, something changed. She felt power where she had felt stuck.
+          Michelle wrote that her son spoke to her with disrespect. Then she remembered the last time it happened. He raised his voice, and she felt her body react. She wanted to say something, but she did not. She looked down, changed the subject, and stayed in the conversation. That was when she saw it â her toleration included what she did in that moment. She stayed silent. She allowed it to continue. When she saw that clearly, something changed. She felt power where she had felt stuck.
         </p>
       </div>
 
@@ -56,7 +58,7 @@ export default function Chapter2() {
         {tols.map((t, i) => (
           <div key={i}>
             {t && <p className="text-slate-500 text-sm mb-1 italic">Original: {t}</p>}
-            <label className="text-amber-400 text-xs font-bold tracking-widest uppercase block mb-2">Toleration {i+1} — using "I"</label>
+            <label className="text-amber-400 text-xs font-bold tracking-widest uppercase block mb-2">Toleration {i+1} â using "I"</label>
             <textarea
               value={iVersion[i]}
               onChange={e => updateArr(setIVersion, i, e.target.value)}
@@ -70,12 +72,12 @@ export default function Chapter2() {
 
       <div className="border-t border-slate-700 pt-8 mb-8">
         <h2 className="text-xl font-semibold mb-2">Go One Step Deeper</h2>
-        <p className="text-slate-400 mb-6">Now rewrite each one as if you are taking full responsibility for what is happening and continuing. This is not about blame — it is about seeing the full truth of your participation.</p>
+        <p className="text-slate-400 mb-6">Now rewrite each one as if you are taking full responsibility for what is happening and continuing. This is not about blame â it is about seeing the full truth of your participation.</p>
         <div className="space-y-5">
           {tols.map((_, i) => (
             <div key={i}>
               {iVersion[i] && <p className="text-slate-500 text-sm mb-1 italic">"I" version: {iVersion[i]}</p>}
-              <label className="text-amber-400 text-xs font-bold tracking-widest uppercase block mb-2">Toleration {i+1} — full responsibility</label>
+              <label className="text-amber-400 text-xs font-bold tracking-widest uppercase block mb-2">Toleration {i+1} â full responsibility</label>
               <textarea
                 value={respVersion[i]}
                 onChange={e => updateArr(setRespVersion, i, e.target.value)}
@@ -91,11 +93,11 @@ export default function Chapter2() {
       <div className="border-t border-slate-700 pt-8 mb-8">
         <h2 className="text-xl font-semibold mb-2">How I Move in My Life</h2>
         <div className="bg-slate-800/60 rounded-2xl p-6 mb-6 border border-slate-700/50">
-          <p className="text-sm text-amber-300 font-semibold mb-1">Story – Elaine, 63</p>
+          <p className="text-sm text-amber-300 font-semibold mb-1">Story â Elaine, 63</p>
           <p className="text-slate-300 text-sm leading-relaxed">Every time something felt off, Elaine told herself it was not worth bringing up. She adjusted her words and stayed where she was. Then one day she said something that surprised her: "I am the one leaving myself out."</p>
         </div>
         <label className="text-amber-400 text-xs font-bold tracking-widest uppercase block mb-2">Complete this sentence</label>
-        <p className="text-slate-400 italic mb-3">"In my life, when something does not feel right, I…"</p>
+        <p className="text-slate-400 italic mb-3">"In my life, when something does not feel right, Iâ¦"</p>
         <textarea
           value={pattern}
           onChange={e => setPattern(e.target.value)}
@@ -155,10 +157,10 @@ export default function Chapter2() {
       <div className="border-t border-slate-700 pt-8 mb-8">
         <h2 className="text-xl font-semibold mb-2">What My Pattern Is Trying to Do</h2>
         <div className="bg-slate-800/60 rounded-2xl p-6 mb-6 border border-slate-700/50">
-          <p className="text-sm text-amber-300 font-semibold mb-1">Story – Carla, 66</p>
+          <p className="text-sm text-amber-300 font-semibold mb-1">Story â Carla, 66</p>
           <p className="text-slate-300 text-sm leading-relaxed">Carla noticed that every time she felt tension, she moved toward making things easier for everyone else. She agreed, smiled, and gave more, even when she felt tired. Then she saw what it was costing her. When she saw that clearly, she understood why nothing was changing.</p>
         </div>
-        <p className="text-slate-400 italic mb-3">"The reason I do this may be because I am trying to…"</p>
+        <p className="text-slate-400 italic mb-3">"The reason I do this may be because I am trying toâ¦"</p>
         <textarea
           value={patternPurpose}
           onChange={e => setPatternPurpose(e.target.value)}
@@ -179,9 +181,9 @@ export default function Chapter2() {
         disabled={!canContinue}
         className={`w-full py-4 rounded-2xl font-bold text-lg transition-all ${canContinue ? 'bg-amber-400 text-slate-900 hover:bg-amber-300' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}`}
       >
-        Continue to Chapter 3 →
+        Continue to Chapter 3 â
       </button>
-      <a href="/mastery/workbook/ch1" className="block text-center text-slate-500 text-sm mt-4 hover:text-slate-400">← Back to Chapter 1</a>
+      <a href="/mastery/workbook/ch1" className="block text-center text-slate-500 text-sm mt-4 hover:text-slate-400">â Back to Chapter 1</a>
     </div>
   );
 }

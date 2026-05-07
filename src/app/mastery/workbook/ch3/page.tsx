@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { saveProgress } from '@/lib/mastery-progress';
 import { useRouter } from 'next/navigation';
 
 type RoomData = { see: string; who: string; feeling: string; bodyFeel: string };
@@ -28,8 +29,9 @@ export default function Chapter3() {
 
   const canContinue = intro.trim().length > 0 && learned.was.trim().length > 0;
 
-  const handleContinue = () => {
-    localStorage.setItem('mastery_ch3', JSON.stringify({ intro, rooms, climate, mother, father, goodMoments, hardMoments, learned }));
+  const handleContinue = async () => {
+    const ch3Data = { intro, rooms, climate, mother, father, goodMoments, hardMoments, learned };
+    await saveProgress('ch3', ch3Data);
     router.push('/mastery/workbook/ch4');
   };
 
@@ -72,13 +74,13 @@ export default function Chapter3() {
         What you learned there did not stay there. It came with you into your life today.
       </p>
       <p className="text-slate-400 mb-8 leading-relaxed">
-        Before you begin — slow down. You are not remembering your childhood the way you tell a story. You are stepping back into it as the child you were. You are not analyzing. You are noticing.
+        Before you begin â slow down. You are not remembering your childhood the way you tell a story. You are stepping back into it as the child you were. You are not analyzing. You are noticing.
       </p>
 
       <div className="bg-slate-800/60 rounded-2xl p-6 mb-8 border border-slate-700/50">
-        <p className="text-sm text-amber-300 font-semibold mb-1">Story – Angela, 66</p>
+        <p className="text-sm text-amber-300 font-semibold mb-1">Story â Angela, 66</p>
         <p className="text-slate-300 text-sm leading-relaxed">
-          Angela thought her childhood was normal. When she went back into her house, she saw the kitchen first. Her mother was moving quickly. Angela stood there, wanting to say something, but she could feel it was not the right moment. Then the living room — her father in his chair, the room felt serious. She knew not to interrupt. Room by room, she felt something she had not allowed herself to feel before. She had learned to watch. She had learned to wait. She had learned to stay small.
+          Angela thought her childhood was normal. When she went back into her house, she saw the kitchen first. Her mother was moving quickly. Angela stood there, wanting to say something, but she could feel it was not the right moment. Then the living room â her father in his chair, the room felt serious. She knew not to interrupt. Room by room, she felt something she had not allowed herself to feel before. She had learned to watch. She had learned to wait. She had learned to stay small.
         </p>
       </div>
 
@@ -101,7 +103,7 @@ export default function Chapter3() {
       <RoomSection title="The Living Room" roomKey="livingRoom" desc="Walk into the living room. This is where people often gathered." />
       <RoomSection title="Your Bedroom" roomKey="bedroom" desc="Go into your bedroom. This is where you slept and where you were alone." />
       <RoomSection title="The Dinner Table" roomKey="dinnerTable" desc="Sit at the table as your younger self. This is an important place." />
-      <RoomSection title="Where You Played" roomKey="play" desc="Go to the place where you spent time playing — inside or outside." />
+      <RoomSection title="Where You Played" roomKey="play" desc="Go to the place where you spent time playing â inside or outside." />
 
       <div className="border-t border-slate-700 pt-8 mb-8">
         <h3 className="text-lg font-semibold text-amber-400 mb-4">The Feeling of the House</h3>
@@ -174,12 +176,12 @@ export default function Chapter3() {
         <h3 className="text-lg font-semibold text-amber-400 mb-4">Moments That Stayed With You</h3>
         <div className="space-y-4">
           <div>
-            <label className="text-slate-400 text-xs font-semibold uppercase tracking-widest block mb-1">Moments that felt warm or special — who was there, how did you feel?</label>
+            <label className="text-slate-400 text-xs font-semibold uppercase tracking-widest block mb-1">Moments that felt warm or special â who was there, how did you feel?</label>
             <textarea value={goodMoments} onChange={e => setGoodMoments(e.target.value)} rows={3}
               className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 resize-none focus:outline-none focus:border-amber-400 transition-colors" />
           </div>
           <div>
-            <label className="text-slate-400 text-xs font-semibold uppercase tracking-widest block mb-1">Moments that felt confusing, scary, or not good — what happened, how did you feel?</label>
+            <label className="text-slate-400 text-xs font-semibold uppercase tracking-widest block mb-1">Moments that felt confusing, scary, or not good â what happened, how did you feel?</label>
             <textarea value={hardMoments} onChange={e => setHardMoments(e.target.value)} rows={3}
               className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 resize-none focus:outline-none focus:border-amber-400 transition-colors" />
           </div>
@@ -220,9 +222,9 @@ export default function Chapter3() {
         disabled={!canContinue}
         className={`w-full py-4 rounded-2xl font-bold text-lg transition-all ${canContinue ? 'bg-amber-400 text-slate-900 hover:bg-amber-300' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}`}
       >
-        Continue to Chapter 4 →
+        Continue to Chapter 4 â
       </button>
-      <a href="/mastery/workbook/ch2" className="block text-center text-slate-500 text-sm mt-4 hover:text-slate-400">← Back to Chapter 2</a>
+      <a href="/mastery/workbook/ch2" className="block text-center text-slate-500 text-sm mt-4 hover:text-slate-400">â Back to Chapter 2</a>
     </div>
   );
 }
