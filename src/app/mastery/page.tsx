@@ -27,12 +27,12 @@ function MasteryContent() {
       <div className="w-full max-w-sm bg-slate-800/60 rounded-2xl p-6 mb-8 border border-amber-500/40">
         <p className="text-slate-400 text-xs uppercase tracking-widest mb-4 text-center">What You Get</p>
         {([
-          ['📓', '26-week guided workbook path'],
-          ['🤖', 'Pamela AI coaching on demand'],
-          ['✅', 'Weekly accountability check-ins'],
-          ['🔄', 'Every 4-week deep reflection'],
-          ['🎯', '3 personal goals from your tolerations'],
-          ['💛', 'Support while you practice living differently'],
+          ['ð', '26-week guided workbook path'],
+          ['ð¤', 'Pamela AI coaching on demand'],
+          ['â', 'Weekly accountability check-ins'],
+          ['ð', 'Every 4-week deep reflection'],
+          ['ð¯', '3 personal goals from your tolerations'],
+          ['ð', 'Support while you practice living differently'],
         ] as [string, string][]).map(([icon, text]) => (
           <div key={text} className="flex items-start gap-3 mb-3">
             <span className="text-lg">{icon}</span>
@@ -49,7 +49,7 @@ function MasteryContent() {
       </div>
 
       <Link
-        href={'/mastery/goals' + (email ? '?email=' + encodeURIComponent(email) : '')}
+        href={'/mastery/workbook/ch1' + (email ? '?email=' + encodeURIComponent(email) : '')}
         className="w-full max-w-sm block text-center py-4 rounded-2xl text-slate-900 font-semibold text-base transition-all duration-300 hover:scale-105 active:scale-95 mb-4"
         style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', boxShadow: '0 8px 32px rgba(245,158,11,0.3)' }}
       >
@@ -57,7 +57,7 @@ function MasteryContent() {
       </Link>
 
       <Link href="/" className="text-slate-500 text-sm hover:text-slate-300 transition-colors">
-        ← Back to home
+        â Back to home
       </Link>
     </div>
   );
