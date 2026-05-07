@@ -260,7 +260,11 @@ export default function VoiceInterface() {
                     2: process.env.NEXT_PUBLIC_GHL_URL_TIER2 || '/processing?tier=2',
                     3: process.env.NEXT_PUBLIC_GHL_URL_TIER3 || '/mastery',
                 };
-                window.location.href = GHL_URLS[tier] || '/report';
+                const baseUrl = GHL_URLS[tier] || '/report';
+                const finalUrl = tier === 3 
+                  ? baseUrl + '?name=' + encodeURIComponent(capturedFirstName || '') + '&email=' + encodeURIComponent(capturedEmail || '')
+                  : baseUrl;
+                window.location.href = finalUrl;
             }
         }
     }, [transcript, sessionId, selectedTier]);
@@ -669,7 +673,7 @@ export default function VoiceInterface() {
                                 This takes about 10 minutes.
                             </p>
                             <p className="text-slate-400 text-base leading-relaxed max-w-md mx-auto">
-                                Check your email for your full Deep Dive — report, podcast, video, and slides.
+                                Check your email for your full Deep Dive â report, podcast, video, and slides.
                                 You can close this window. Everything will be sent to <span className="text-amber-400">{capturedEmail}</span>.
                             </p>
                         </div>

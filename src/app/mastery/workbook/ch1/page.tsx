@@ -1,10 +1,23 @@
 'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function Chapter1() {
+function Chapter1Content() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tols, setTols] = useState(['', '', '']);
+  const [userEmail, setUserEmail] = useState('');
+  const [userName, setUserName] = useState('');
+
+  useEffect(() => {
+    const nameParam = searchParams.get('name') || '';
+    const emailParam = searchParams.get('email') || '';
+    if (nameParam) setUserName(nameParam);
+    if (emailParam) setUserEmail(emailParam);
+    // Save to localStorage so all chapters can access it
+    if (nameParam) localStorage.setItem('mastery_user_name', nameParam);
+    if (emailParam) localStorage.setItem('mastery_user_email', emailParam);
+  }, [searchParams]);
 
   const update = (i: number, val: string) => {
     const next = [...tols]; next[i] = val; setTols(next);
@@ -24,8 +37,14 @@ export default function Chapter1() {
           <div key={n} className={`h-1 flex-1 rounded-full ${n === 1 ? 'bg-amber-400' : 'bg-slate-700'}`} />
         ))}
       </div>
+
+      {userName && (
+        <p className="text-amber-400 text-sm mb-4">Welcome, {userName}. Let's begin your workbook.</p>
+      )}
+
       <p className="text-amber-400 text-sm font-semibold tracking-widest uppercase mb-2">Chapter 1</p>
       <h1 className="text-3xl font-bold mb-4">Your Three Tolerations</h1>
+
       <div className="bg-slate-800/60 rounded-2xl p-6 mb-8 border border-slate-700/50">
         <p className="text-slate-300 leading-relaxed mb-4">
           A toleration is not just something that bothers you for a moment. It is something that drains you, hurts you, or does not feel right — and you keep allowing it to stay in your life.
@@ -40,10 +59,12 @@ export default function Chapter1() {
           </p>
         </div>
       </div>
+
       <h2 className="text-xl font-semibold mb-2">Now Look at Your Life</h2>
       <p className="text-slate-400 mb-6 leading-relaxed">
         Not the version that sounds reasonable. Not the explanation you give others. The truth. Write three things in your life right now that do not feel right. Do not explain them. Do not soften them.
       </p>
+
       <div className="space-y-5">
         {['Toleration 1', 'Toleration 2', 'Toleration 3'].map((label, i) => (
           <div key={i}>
@@ -58,11 +79,13 @@ export default function Chapter1() {
           </div>
         ))}
       </div>
+
       <div className="mt-8 bg-slate-800/40 rounded-xl p-4 border border-slate-700/30">
         <p className="text-slate-400 text-sm italic leading-relaxed">
           Now read what you wrote. Do not move past this quickly. Stay here for a moment and let yourself feel what is there.
         </p>
       </div>
+
       <button
         onClick={handleContinue}
         disabled={!canContinue}
@@ -70,7 +93,16 @@ export default function Chapter1() {
       >
         Continue to Chapter 2 →
       </button>
+
       <a href="/mastery" className="block text-center text-slate-500 text-sm mt-4 hover:text-slate-400">← Back to Mastery home</a>
     </div>
+  );
+}
+
+export default function Chapter1() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-900" />}>
+      <Chapter1Content />
+    </Suspense>
   );
 }
