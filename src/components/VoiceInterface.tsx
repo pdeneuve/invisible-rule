@@ -258,6 +258,7 @@ export default function VoiceInterface() {
                 const GHL_URLS: Record<number, string> = {
                     1: process.env.NEXT_PUBLIC_GHL_URL_TIER1 || '/processing?tier=1',
                     2: process.env.NEXT_PUBLIC_GHL_URL_TIER2 || '/processing?tier=2',
+                    3: process.env.NEXT_PUBLIC_GHL_URL_TIER3 || '/mastery',
                 };
                 window.location.href = GHL_URLS[tier] || '/report';
             }
