@@ -350,7 +350,7 @@ export default function DeepDiveDisplay({ report, firstName }: Props) {
         </h1>
         <p className="text-slate-500 text-sm print:text-slate-600">
           {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-          {' · '}12-section analysis &middot; personalized audio &middot; slide deck
+          {' Â· '}12-section analysis &middot; personalized audio &middot; slide deck
         </p>
       </div>
 
