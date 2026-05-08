@@ -155,7 +155,7 @@ function ShareContent() {
               {data.newOperatingPrinciple}
             </p>
           </div>
-        )}}
+        )}
 
         {/* CTA */}
         <div
