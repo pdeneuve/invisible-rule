@@ -121,7 +121,7 @@ function ShareContent() {
               {data.evolvedPrinciple.length > 300 ? data.evolvedPrinciple.slice(0, 300) + '…' : data.evolvedPrinciple}
             </p>
           </div>
-        )
+        )}
 
         {data.fullBopHypothesis && (
           <div
