@@ -329,7 +329,7 @@ export default function DeepDiveDisplay({ report, firstName }: Props) {
 
   //  Render 
   return (
-    <div className="min-h-screen bg-slate-950 print:bg-white">
+    <div className="min-h-screen bg-slate-950 print:bg-white pb-20 print:pb-0">
 
       {/*  Header  */}
       <div className="text-center px-4 pt-12 pb-8 print:pt-6 print:pb-4">
@@ -350,7 +350,7 @@ export default function DeepDiveDisplay({ report, firstName }: Props) {
         </h1>
         <p className="text-slate-500 text-sm print:text-slate-600">
           {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-          {' &middot; '}12-section analysis &middot; personalized audio &middot; slide deck
+          {' · '}12-section analysis &middot; personalized audio &middot; slide deck
         </p>
       </div>
 
@@ -437,8 +437,8 @@ export default function DeepDiveDisplay({ report, firstName }: Props) {
                       {section.title}
                     </h2>
                   </div>
-                  <div className="text-slate-300 leading-relaxed whitespace-pre-wrap text-[15px] print:text-slate-800">
-                    {content}
+                  <div className="text-slate-300 leading-relaxed text-[15px] print:text-slate-800 space-y-3">
+                    {content.split('\n').filter(Boolean).map((para, i) => <p key={i}>{para}</p>)}
                   </div>
                 </div>
               );
@@ -914,7 +914,27 @@ export default function DeepDiveDisplay({ report, firstName }: Props) {
         </div>
       )}
 
-      {/*  Footer  */}
+      {/* Sticky action bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 print:hidden" style={{ background: 'rgba(15,23,42,0.95)', borderTop: '1px solid rgba(51,65,85,0.6)', backdropFilter: 'blur(12px)' }}>
+        <div className="max-w-3xl mx-auto px-4 py-3 grid grid-cols-2 gap-3">
+          <button
+            onClick={handlePrintReport}
+            className="flex items-center justify-center gap-2 py-3 rounded-xl font-medium text-white transition-all hover:opacity-90 active:scale-95"
+            style={{ background: 'rgba(30,41,59,0.9)', border: '1px solid rgba(51,65,85,0.8)' }}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            Download PDF
+          </button>
+          <button
+            onClick={handleCopyShareLink}
+            className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold transition-all"
+            style={{ background: shareState === 'copied' ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #fbbf24, #f59e0b)', color: '#0f172a', boxShadow: '0 4px 20px rgba(245,158,11,0.2)' }}
+          >
+            {shareState === 'copied' ? '\u2713 Link Copied!' : '\u29c6 Share My Profile'}
+          </button>
+        </div>
+      </div>
+            {/*  Footer  */}
       <div className="text-center pb-10 print:pb-4 print:mt-6">
         <p className="text-slate-700 text-xs print:text-slate-500">
           &copy; {new Date().getFullYear()} The Invisible Rule &middot; The pattern you uncovered is real &mdash; and it&apos;s yours.
