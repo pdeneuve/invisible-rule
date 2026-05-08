@@ -121,7 +121,41 @@ function ShareContent() {
               {data.evolvedPrinciple.length > 300 ? data.evolvedPrinciple.slice(0, 300) + 'â¦' : data.evolvedPrinciple}
             </p>
           </div>
+        )
+
+        {data.fullBopHypothesis && (
+          <div
+            className="rounded-2xl p-8"
+            style={{
+              background: 'rgba(15, 23, 42, 0.7)',
+              border: '1px solid rgba(212, 160, 23, 0.2)',
+            }}
+          >
+            <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: 'rgba(212, 160, 23, 0.8)' }}>
+              Full Pattern Hypothesis
+            </p>
+            <p className="text-lg leading-relaxed italic" style={{ color: 'rgba(255,255,255,0.9)' }}>
+              &ldquo;{data.fullBopHypothesis}&rdquo;
+            </p>
+          </div>
         )}
+
+        {data.newOperatingPrinciple && (
+          <div
+            className="rounded-2xl p-8"
+            style={{
+              background: 'rgba(15, 23, 42, 0.7)',
+              border: '1px solid rgba(212, 160, 23, 0.2)',
+            }}
+          >
+            <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: 'rgba(212, 160, 23, 0.8)' }}>
+              New Operating Principle
+            </p>
+            <p className="text-lg leading-relaxed" style={{ color: 'rgba(255,255,255,0.9)' }}>
+              {data.newOperatingPrinciple}
+            </p>
+          </div>
+        )}}
 
         {/* CTA */}
         <div
