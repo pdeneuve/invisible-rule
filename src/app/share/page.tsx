@@ -100,7 +100,7 @@ function ShareContent() {
               What It Costs Today
             </p>
             <p className="text-slate-300 text-[15px] leading-relaxed">
-              {data.costToday.length > 300 ? data.costToday.slice(0, 300) + 'â¦' : data.costToday}
+              {data.costToday.length > 300 ? data.costToday.slice(0, 300) + '…' : data.costToday}
             </p>
           </div>
         )}
@@ -118,7 +118,7 @@ function ShareContent() {
               The New Principle They&apos;re Building
             </p>
             <p className="text-slate-300 text-[15px] leading-relaxed">
-              {data.evolvedPrinciple.length > 300 ? data.evolvedPrinciple.slice(0, 300) + 'â¦' : data.evolvedPrinciple}
+              {data.evolvedPrinciple.length > 300 ? data.evolvedPrinciple.slice(0, 300) + '…' : data.evolvedPrinciple}
             </p>
           </div>
         )
@@ -167,7 +167,7 @@ function ShareContent() {
         >
           <p className="text-white font-medium mb-2">What&apos;s your Invisible Rule?</p>
           <p className="text-slate-500 text-sm mb-5 leading-relaxed max-w-sm mx-auto">
-            The unconscious pattern running your life from behind the scenes â mapped in a guided voice session.
+            The unconscious pattern running your life from behind the scenes — mapped in a guided voice session.
           </p>
           <Link
             href="/"
@@ -177,13 +177,13 @@ function ShareContent() {
               boxShadow: '0 8px 24px rgba(245,158,11,0.25)',
             }}
           >
-            Discover Your Invisible Rule â
+            Discover Your Invisible Rule →
           </Link>
         </div>
       </div>
 
       <p className="text-slate-700 text-xs mt-10">
-        Â© {new Date().getFullYear()} The Invisible Rule
+        © {new Date().getFullYear()} The Invisible Rule
       </p>
     </div>
   );
