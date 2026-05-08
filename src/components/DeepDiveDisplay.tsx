@@ -224,6 +224,25 @@ export default function DeepDiveDisplay({ report, firstName }: Props) {
     if (activeTab === 'slides' && slidesState === 'idle') generateSlides();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+  // Fallback: estimate podcast duration from Content-Length if onLoadedMetadata gives 0 or Infinity
+  useEffect(() => {
+    if (!audioUrl || duration > 5) return;
+    const timer = setTimeout(async () => {
+      if (duration > 5) return;
+      try {
+        const head = await fetch(audioUrl, { method: 'HEAD', mode: 'cors' });
+        const cl = parseInt(head.headers.get('content-length') || '0');
+        if (cl > 0) {
+          // Estimate duration: file bytes * 8 bits / 128000 bits-per-second (128kbps MP3)
+          const estimated = (cl * 8) / 128000;
+          if (estimated > 10) setDuration(Math.round(estimated));
+        }
+      } catch { /* ignore CORS errors */ }
+    }, 2000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioUrl]);
+
 
   // Audio player controls
   const togglePlay = () => {
