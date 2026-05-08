@@ -673,7 +673,7 @@ export default function VoiceInterface() {
                                 This takes about 10 minutes.
                             </p>
                             <p className="text-slate-400 text-base leading-relaxed max-w-md mx-auto">
-                                Check your email for your full Deep Dive â report, podcast, video, and slides.
+                                Check your email for your full Deep Dive — report, podcast, video, and slides.
                                 You can close this window. Everything will be sent to <span className="text-amber-400">{capturedEmail}</span>.
                             </p>
                         </div>
