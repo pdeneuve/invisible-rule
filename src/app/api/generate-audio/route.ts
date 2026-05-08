@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { PODCAST_SCRIPT_PROMPT } from '@/lib/deep-dive-prompts';
 
-// Allow up to 5 minutes â audio generation takes time
+// Allow up to 5 minutes — audio generation takes time
 export const maxDuration = 300;
 
 const PAMELA_VOICE_ID = 'ZPJulgnHgp8y0rGE6kJ4';
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing report data' }, { status: 400 });
   }
 
-  // ââ Step 1: Generate podcast script with Claude âââââââââââââââââââââââââ
+  // ── Step 1: Generate podcast script with Claude ─────────────────────────
   const client = new Anthropic({ apiKey: anthropicKey });
 
   const scriptPrompt = PODCAST_SCRIPT_PROMPT({
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
 
   const script: Array<{ speaker: 'pamela' | 'brian'; text: string }> = JSON.parse(jsonMatch[0]);
 
-  // ââ Step 2: Generate audio for each segment sequentially âââââââââââââââ
+  // ── Step 2: Generate audio for each segment sequentially ───────────────
   const audioBuffers: ArrayBuffer[] = [];
 
   for (const segment of script) {
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     audioBuffers.push(buffer);
   }
 
-  // ââ Step 3: Concatenate all MP3 buffers âââââââââââââââââââââââââââââââââ
+  // ── Step 3: Concatenate all MP3 buffers ─────────────────────────────────
   const totalLength = audioBuffers.reduce((sum, buf) => sum + buf.byteLength, 0);
   const combined = new Uint8Array(totalLength);
   let offset = 0;
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
     offset += buf.byteLength;
   }
 
-  // ââ Step 4: Return the audio as MP3 + the script as a header âââââââââââ
+  // ── Step 4: Return the audio as MP3 + the script as a header ───────────
   return new Response(combined, {
     headers: {
       'Content-Type': 'audio/mpeg',
