@@ -15,6 +15,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { getSession } from '@/lib/session-store';
+import {
+  savePending,
+  isOrderProcessed,
+  markOrderProcessed,
+} from '@/lib/pending-store';
 
 export const maxDuration = 300;
 
@@ -46,8 +51,8 @@ interface GHLPayload {
   contact_id?: string;
 }
 
-function detectTierFromPayload(payload: GHLPayload, queryTier: number | null): number {
-  if (queryTier && [1, 2].includes(queryTier)) return queryTier;
+function detectTierFromPayload(payload: GHLPayload, queryTier: number | null): 1 | 2 {
+  if (queryTier === 1 || queryTier === 2) return queryTier;
 
   const productName = payload.products?.[0]?.name?.toLowerCase() || '';
   if (productName.includes('first light')) return 1;
@@ -108,12 +113,13 @@ async function sendNoSessionEmail(
   tier: number
 ): Promise<void> {
   const tierName = TIER_NAMES[tier];
+  const sessionUrl = `${appUrl()}/?pending=${tier}`;
   const body = `
     <h1 style="color:#ffffff;font-size:24px;font-weight:300;margin:0 0 16px;">${firstName}, one quick step.</h1>
     <p style="font-size:15px;line-height:1.7;margin:0 0 16px;">Your payment for ${tierName} was received. To deliver your personalized assets, we need your voice session first.</p>
     <p style="font-size:15px;line-height:1.7;margin:0 0 24px;">Take 30 to 60 minutes when you have a quiet room, then we will email you your complete ${tierName}.</p>
     <div style="text-align:center;margin:32px 0;">
-      <a href="${appUrl()}" style="display:inline-block;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#0f172a;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;text-decoration:none;">Begin your voice session</a>
+      <a href="${sessionUrl}" style="display:inline-block;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#0f172a;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;text-decoration:none;">Begin your voice session</a>
     </div>
     <p style="font-size:13px;color:#64748b;margin:0;">Once your session is complete, your ${tierName} will be generated and emailed within minutes - automatically.</p>
   `;
@@ -171,6 +177,16 @@ export async function POST(req: NextRequest) {
   const tier = detectTierFromPayload(payload, queryTier);
   const email = extractEmail(payload);
   const firstName = extractName(payload);
+  const orderId = payload.orderId || payload.order_id || '';
+
+  // Idempotency: if GHL retries the same order, skip duplicate fulfillment.
+  if (orderId && (await isOrderProcessed(orderId))) {
+    console.log(`GHL webhook: order ${orderId} already processed, skipping`);
+    return NextResponse.json(
+      { received: true, tier, fulfilled: true, idempotent: true },
+      { status: 200 },
+    );
+  }
 
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey || !email) {
@@ -183,8 +199,26 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getSession(email);
     if (!session || !session.report) {
+      // User paid before completing their voice session. Save a pending record
+      // so save-session can fulfill once the session is done.
+      if (tier === 1 || tier === 2) {
+        await savePending({
+          email,
+          firstName,
+          tier,
+          orderId: orderId || undefined,
+          paidAt: new Date().toISOString(),
+        });
+      }
       await sendNoSessionEmail(resend, email, firstName, tier);
-      return NextResponse.json({ received: true, tier, fulfilled: false, reason: 'no-session' }, { status: 200 });
+      // Mark the order processed so GHL retries don't re-trigger this branch.
+      // Fulfillment will be driven by the browser when the user completes their
+      // voice session via the ?pending= link in the no-session email.
+      if (orderId) await markOrderProcessed(orderId);
+      return NextResponse.json(
+        { received: true, tier, fulfilled: false, reason: 'pending-session' },
+        { status: 200 },
+      );
     }
 
     const resolvedFirstName = session.firstName || firstName;
@@ -194,6 +228,9 @@ export async function POST(req: NextRequest) {
     } else {
       await fulfillDeepDive(resolvedFirstName, email, session.report);
     }
+
+    if (orderId) await markOrderProcessed(orderId);
+
     return NextResponse.json({ received: true, tier, fulfilled: true }, { status: 200 });
   } catch (err) {
     console.error('GHL webhook fulfillment error:', err);

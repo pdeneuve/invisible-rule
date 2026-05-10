@@ -228,6 +228,11 @@ export default function VoiceInterface() {
                 });
             } catch (err) { console.warn('save-session failed:', err); }
 
+            const pendingParam = typeof window !== 'undefined'
+                ? new URLSearchParams(window.location.search).get('pending')
+                : null;
+            const isPending = pendingParam === '1' || pendingParam === '2';
+
             if (tier === null) {
                 // Free Deep Dive: trigger fulfillment immediately.
                 // Use keepalive so the request survives the page redirect.
@@ -239,14 +244,40 @@ export default function VoiceInterface() {
                         keepalive: true,
                     });
                 } catch (err) { console.warn('fulfill-deep-dive trigger failed:', err); }
+            } else if (isPending && tier === 1) {
+                // Paid Tier 1, voice session done after payment: email the report now.
+                try {
+                    await fetch('/api/send-report', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ firstName, email, report, tier: 1 }),
+                    });
+                } catch (err) { console.warn('send-report (pending tier 1) failed:', err); }
+            } else if (isPending && tier === 2) {
+                // Paid Tier 2, voice session done after payment: trigger Deep Dive pipeline.
+                try {
+                    fetch('/api/fulfill-deep-dive', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ firstName, email, report }),
+                        keepalive: true,
+                    });
+                } catch (err) { console.warn('fulfill-deep-dive (pending tier 2) failed:', err); }
             }
-            // Paid tiers (1 and 2): the GHL webhook fulfills after payment.
-            // Do NOT email or generate assets here, or the user gets the product without paying.
+            // Normal paid tiers (1 and 2) without ?pending: the GHL webhook fulfills
+            // after payment. Do NOT email or generate assets here, or the user gets
+            // the product without paying.
         }
 
         if (typeof window !== 'undefined') {
+            const pendingParam = new URLSearchParams(window.location.search).get('pending');
+            const isPending = pendingParam === '1' || pendingParam === '2';
+
             if (tier === null) {
                 window.location.href = '/report';
+            } else if (isPending) {
+                // User already paid; show their processing/results page instead of GHL.
+                window.location.href = `/processing?tier=${tier}`;
             } else {
                 const GHL_URLS: Record<number, string> = {
                     1: process.env.NEXT_PUBLIC_GHL_URL_TIER1 || '/processing?tier=1',
@@ -254,7 +285,7 @@ export default function VoiceInterface() {
                     3: process.env.NEXT_PUBLIC_GHL_URL_TIER3 || '/mastery',
                 };
                 const baseUrl = GHL_URLS[tier] || '/report';
-                const finalUrl = tier === 3 
+                const finalUrl = tier === 3
                   ? baseUrl + '?name=' + encodeURIComponent(capturedFirstName || '') + '&email=' + encodeURIComponent(capturedEmail || '')
                   : baseUrl;
                 window.location.href = finalUrl;
@@ -268,8 +299,16 @@ export default function VoiceInterface() {
         if (hasSubmittedRef.current) return;
         if (!capturedEmail || !capturedFirstName) return;
 
-        const isPaid = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'paid';
-        if (isPaid) {
+        const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+        const isPaid = params?.get('mode') === 'paid';
+        const pendingParam = params?.get('pending');
+        const pendingTier: 1 | 2 | null = pendingParam === '1' ? 1 : pendingParam === '2' ? 2 : null;
+
+        if (pendingTier) {
+            // User already paid (came from a "complete your voice session" email).
+            // Skip the pricing screen and use the tier they paid for.
+            handleLeadSubmit(capturedFirstName, capturedEmail, pendingTier);
+        } else if (isPaid) {
             setShowPricing(true);
         } else {
             handleLeadSubmit(capturedFirstName, capturedEmail, null);
