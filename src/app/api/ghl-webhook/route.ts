@@ -7,7 +7,9 @@
  *   - If no session exists yet, emails the user with a link to complete the voice session first
  *
  * On Tier 1 (First Light $7) payment:
- *   - Sends a payment confirmation email pointing to their First Light report
+ *   - Looks up the user's saved voice session by email
+ *   - Emails the First Light report via /api/send-report
+ *   - If no session exists yet, emails the user with a link to complete the voice session first
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -19,11 +21,6 @@ export const maxDuration = 300;
 const TIER_NAMES: Record<number, string> = {
   1: 'First Light',
   2: 'The Deep Dive',
-};
-
-const TIER_PRICES: Record<number, string> = {
-  1: '$7',
-  2: '$97',
 };
 
 interface GHLPayload {
@@ -123,21 +120,16 @@ async function sendNoSessionEmail(
   await sendSimpleEmail(resend, email, `${firstName}, complete your voice session to receive your ${tierName}`, body);
 }
 
-async function sendTier1ConfirmationEmail(
-  resend: Resend,
+async function fulfillFirstLight(
+  firstName: string,
   email: string,
-  firstName: string
+  report: Record<string, string>
 ): Promise<void> {
-  const reportUrl = `${appUrl()}/processing?tier=1`;
-  const body = `
-    <h1 style="color:#ffffff;font-size:24px;font-weight:300;margin:0 0 16px;">${firstName}, you're in.</h1>
-    <p style="color:#64748b;font-size:14px;margin:0 0 24px;">First Light &middot; ${TIER_PRICES[1]}</p>
-    <p style="font-size:15px;line-height:1.7;margin:0 0 16px;">Your payment was received. Your First Light report has been emailed to you separately.</p>
-    <div style="text-align:center;margin:32px 0;">
-      <a href="${reportUrl}" style="display:inline-block;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#0f172a;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;text-decoration:none;">Access Your First Light</a>
-    </div>
-  `;
-  await sendSimpleEmail(resend, email, `${firstName}, your First Light is ready`, body);
+  await fetch(`${appUrl()}/api/send-report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ firstName, email, report, tier: 1 }),
+  });
 }
 
 async function fulfillDeepDive(
@@ -189,18 +181,19 @@ export async function POST(req: NextRequest) {
   const resend = new Resend(resendKey);
 
   try {
-    if (tier === 1) {
-      await sendTier1ConfirmationEmail(resend, email, firstName);
-      return NextResponse.json({ received: true, tier, fulfilled: true }, { status: 200 });
-    }
-
     const session = await getSession(email);
     if (!session || !session.report) {
       await sendNoSessionEmail(resend, email, firstName, tier);
       return NextResponse.json({ received: true, tier, fulfilled: false, reason: 'no-session' }, { status: 200 });
     }
 
-    await fulfillDeepDive(session.firstName || firstName, email, session.report);
+    const resolvedFirstName = session.firstName || firstName;
+
+    if (tier === 1) {
+      await fulfillFirstLight(resolvedFirstName, email, session.report);
+    } else {
+      await fulfillDeepDive(resolvedFirstName, email, session.report);
+    }
     return NextResponse.json({ received: true, tier, fulfilled: true }, { status: 200 });
   } catch (err) {
     console.error('GHL webhook fulfillment error:', err);

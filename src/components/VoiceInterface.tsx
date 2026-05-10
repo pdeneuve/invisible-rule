@@ -33,7 +33,6 @@ export default function VoiceInterface() {
     const [currentPhaseIndex, setCurrentPhaseIndex] = useState(0);
     const [volumeLevel, setVolumeLevel] = useState(0);
     const [showPricing, setShowPricing] = useState(false);
-    const [selectedTier, setSelectedTier] = useState<1 | 2 | null>(null);
     const [showSafety, setShowSafety] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
     const [sessionId] = useState(() => uuidv4());
@@ -129,12 +128,11 @@ export default function VoiceInterface() {
         }
     }, []);
 
-    const handleLeadSubmit = useCallback(async (firstName: string, email: string) => {
+    const handleLeadSubmit = useCallback(async (firstName: string, email: string, tier: 1 | 2 | 3 | null) => {
         // Prevent duplicate submissions
         if (hasSubmittedRef.current) return;
         hasSubmittedRef.current = true;
 
-        const tier = selectedTier;
         const reportTier: 1 | 2 = tier === 1 ? 1 : 2;
         const transcriptText = transcript
             .map(t => `${t.role === 'user' ? 'USER' : 'GUIDE'}: ${t.text}`)
@@ -231,7 +229,8 @@ export default function VoiceInterface() {
             } catch (err) { console.warn('save-session failed:', err); }
 
             if (tier === null) {
-                // Use keepalive so the request survives the page redirect
+                // Free Deep Dive: trigger fulfillment immediately.
+                // Use keepalive so the request survives the page redirect.
                 try {
                     fetch('/api/fulfill-deep-dive', {
                         method: 'POST',
@@ -240,15 +239,9 @@ export default function VoiceInterface() {
                         keepalive: true,
                     });
                 } catch (err) { console.warn('fulfill-deep-dive trigger failed:', err); }
-            } else if (tier === 1) {
-                try {
-                    await fetch('/api/send-report', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ firstName, email, report, tier }),
-                    });
-                } catch (err) { console.warn('Email send failed:', err); }
             }
+            // Paid tiers (1 and 2): the GHL webhook fulfills after payment.
+            // Do NOT email or generate assets here, or the user gets the product without paying.
         }
 
         if (typeof window !== 'undefined') {
@@ -267,7 +260,7 @@ export default function VoiceInterface() {
                 window.location.href = finalUrl;
             }
         }
-    }, [transcript, sessionId, selectedTier]);
+    }, [transcript, sessionId, capturedFirstName, capturedEmail]);
 
     // Auto-trigger submission ONCE when voice ends - replaces the manual button
     useEffect(() => {
@@ -279,7 +272,7 @@ export default function VoiceInterface() {
         if (isPaid) {
             setShowPricing(true);
         } else {
-            handleLeadSubmit(capturedFirstName, capturedEmail);
+            handleLeadSubmit(capturedFirstName, capturedEmail, null);
         }
     }, [callState, capturedEmail, capturedFirstName, handleLeadSubmit]);
 
@@ -750,10 +743,9 @@ export default function VoiceInterface() {
                 <div className="fixed inset-0 z-50 overflow-y-auto">
                     <PricingScreen
                         onSelectTier={(tier) => {
-                            setSelectedTier(tier);
                             setShowPricing(false);
                             if (capturedEmail && capturedFirstName) {
-                                handleLeadSubmit(capturedFirstName, capturedEmail);
+                                handleLeadSubmit(capturedFirstName, capturedEmail, tier);
                             }
                         }}
                     />
