@@ -228,10 +228,14 @@ export default function VoiceInterface() {
                 });
             } catch (err) { console.warn('save-session failed:', err); }
 
-            const pendingParam = typeof window !== 'undefined'
-                ? new URLSearchParams(window.location.search).get('pending')
+            const params = typeof window !== 'undefined'
+                ? new URLSearchParams(window.location.search)
                 : null;
-            const isPending = pendingParam === '1' || pendingParam === '2';
+            const pendingParam = params?.get('pending');
+            const testParam = params?.get('test');
+            const isPending =
+                pendingParam === '1' || pendingParam === '2' ||
+                testParam === 'firstlight' || testParam === 'deepdive';
 
             if (tier === null) {
                 // Free Deep Dive: trigger fulfillment immediately.
@@ -270,8 +274,12 @@ export default function VoiceInterface() {
         }
 
         if (typeof window !== 'undefined') {
-            const pendingParam = new URLSearchParams(window.location.search).get('pending');
-            const isPending = pendingParam === '1' || pendingParam === '2';
+            const params = new URLSearchParams(window.location.search);
+            const pendingParam = params.get('pending');
+            const testParam = params.get('test');
+            const isPending =
+                pendingParam === '1' || pendingParam === '2' ||
+                testParam === 'firstlight' || testParam === 'deepdive';
 
             if (tier === null) {
                 window.location.href = '/report';
@@ -303,12 +311,43 @@ export default function VoiceInterface() {
         const isPaid = params?.get('mode') === 'paid';
         const pendingParam = params?.get('pending');
         const pendingTier: 1 | 2 | null = pendingParam === '1' ? 1 : pendingParam === '2' ? 2 : null;
+        const testParam = params?.get('test');
+        const testTier: 1 | 2 | null = testParam === 'firstlight' ? 1 : testParam === 'deepdive' ? 2 : null;
 
         if (pendingTier) {
             // User already paid (came from a "complete your voice session" email).
             // Skip the pricing screen and use the tier they paid for.
             handleLeadSubmit(capturedFirstName, capturedEmail, pendingTier);
-        } else if (isPaid) {
+            return;
+        }
+
+        if (testTier) {
+            // Internal test mode: only honour the test param if the server confirms
+            // TEST_MODE_ENABLED=true. Otherwise silently fall back to default flow.
+            (async () => {
+                let testEnabled = false;
+                try {
+                    const res = await fetch('/api/test-mode/check');
+                    if (res.ok) {
+                        const data = await res.json();
+                        testEnabled = data?.enabled === true;
+                    }
+                } catch (err) {
+                    console.warn('test-mode check failed:', err);
+                }
+
+                if (testEnabled) {
+                    handleLeadSubmit(capturedFirstName, capturedEmail, testTier);
+                } else if (isPaid) {
+                    setShowPricing(true);
+                } else {
+                    handleLeadSubmit(capturedFirstName, capturedEmail, null);
+                }
+            })();
+            return;
+        }
+
+        if (isPaid) {
             setShowPricing(true);
         } else {
             handleLeadSubmit(capturedFirstName, capturedEmail, null);
