@@ -42,25 +42,6 @@ const TIERS = [
     color: 'border-amber-500/60',
     badge: 'Most Powerful',
   },
-  {
-    id: 3,
-    name: 'Invisible Rule Mastery',
-    price: '$297',
-    tagline: 'Stop living by your old rule. Begin your new one.',
-    description: 'A 26-week AI coaching and accountability program. Weekly check-ins, Pamela AI on demand, and 3 personal goals to transform how you live.',
-    includes: [
-      '26-week guided workbook path',
-      'Pamela AI coaching on demand',
-      'Weekly accountability check-ins',
-      'Every 4-week deep reflection',
-      '3 personal goals from your tolerations',
-      'Support while you practice living differently',
-    ],
-    cta: 'Begin Tier 3 Mastery',
-    featured: false,
-    color: 'border-amber-400/40',
-    badge: 'New',
-  },
 ];
 
 export default function PricingScreen({ onSelectTier }: Props) {
