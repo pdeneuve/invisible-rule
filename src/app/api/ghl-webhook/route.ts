@@ -148,7 +148,12 @@ async function fulfillDeepDive(
   await fetch(`${appUrl()}/api/fulfill-deep-dive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ firstName, email, report }),
+    body: JSON.stringify({
+      firstName,
+      email,
+      report,
+      internalSecret: process.env.INTERNAL_FULFILL_SECRET || '',
+    }),
   });
 }
 
