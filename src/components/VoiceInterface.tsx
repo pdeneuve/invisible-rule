@@ -273,7 +273,12 @@ export default function VoiceInterface() {
 
         if (typeof window !== 'undefined') {
             if (tier === null) {
-                window.location.href = '/report';
+                // Free-token users land on /report. Pass the token forward so
+                // the page can verify access server-side before rendering.
+                const url = freeToken
+                    ? `/report?token=${encodeURIComponent(freeToken)}`
+                    : '/report';
+                window.location.href = url;
             } else {
                 const GHL_URLS: Record<number, string> = {
                     1: process.env.NEXT_PUBLIC_GHL_URL_TIER1 || '/processing?tier=1',
