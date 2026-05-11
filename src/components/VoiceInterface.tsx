@@ -60,15 +60,16 @@ export default function VoiceInterface() {
     // Submit-lock so fulfillment never runs more than once per session
     const hasSubmittedRef = useRef(false);
 
+    // Pre-fill the consent form with any cached values, but require the user
+    // to explicitly submit before we treat the email as captured. This prevents
+    // the voice session and Deep Dive from auto-running without the user
+    // re-confirming their intent.
     useEffect(() => {
         if (typeof window === 'undefined') return;
         const ce = localStorage.getItem('captured_email');
         const cf = localStorage.getItem('captured_firstName');
-        if (ce && cf) {
-            setCapturedEmail(ce);
-            setCapturedFirstName(cf);
-            setEmailCaptured(true);
-        }
+        if (ce) setEarlyEmail(ce);
+        if (cf) setEarlyName(cf);
     }, []);
 
     useEffect(() => {
@@ -269,10 +270,13 @@ export default function VoiceInterface() {
         }
     }, [transcript, sessionId, selectedTier]);
 
-    // Auto-trigger submission ONCE when voice ends - replaces the manual button
+    // Auto-trigger submission ONCE when voice ends - replaces the manual button.
+    // Requires emailCaptured (user explicitly submitted the consent form this
+    // session) so we never auto-fulfill using a stale localStorage email.
     useEffect(() => {
         if (callState !== 'ended') return;
         if (hasSubmittedRef.current) return;
+        if (!emailCaptured) return;
         if (!capturedEmail || !capturedFirstName) return;
 
         const isPaid = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'paid';
@@ -281,7 +285,7 @@ export default function VoiceInterface() {
         } else {
             handleLeadSubmit(capturedFirstName, capturedEmail);
         }
-    }, [callState, capturedEmail, capturedFirstName, handleLeadSubmit]);
+    }, [callState, emailCaptured, capturedEmail, capturedFirstName, handleLeadSubmit]);
 
     const startCall = useCallback(async () => {
         try {
