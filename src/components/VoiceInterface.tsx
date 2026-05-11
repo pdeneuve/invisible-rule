@@ -52,6 +52,11 @@ export default function VoiceInterface() {
     const [earlyError, setEarlyError] = useState('');
     const [earlySubmitting, setEarlySubmitting] = useState(false);
 
+    // Free-access token from URL ?token=... (existing-client free Deep Dive).
+    // Validated server-side via /api/validate-free-token before granting access.
+    const [freeToken, setFreeToken] = useState('');
+    const [freeTokenValid, setFreeTokenValid] = useState(false);
+
     const vapiRef = useRef<InstanceType<typeof Vapi> | null>(null);
     const transcriptRef = useRef<HTMLDivElement>(null);
     const durationRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -70,6 +75,18 @@ export default function VoiceInterface() {
         const cf = localStorage.getItem('captured_firstName');
         if (ce) setEarlyEmail(ce);
         if (cf) setEarlyName(cf);
+
+        const urlToken = new URLSearchParams(window.location.search).get('token') || '';
+        if (!urlToken) return;
+        setFreeToken(urlToken);
+        fetch('/api/validate-free-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: urlToken }),
+        })
+            .then(r => r.json())
+            .then(d => setFreeTokenValid(!!d?.valid))
+            .catch(() => setFreeTokenValid(false));
     }, []);
 
     useEffect(() => {
@@ -232,12 +249,14 @@ export default function VoiceInterface() {
             } catch (err) { console.warn('save-session failed:', err); }
 
             if (tier === null) {
-                // Use keepalive so the request survives the page redirect
+                // Use keepalive so the request survives the page redirect.
+                // freeToken is required server-side; the endpoint rejects
+                // unauthenticated free fulfillments.
                 try {
                     fetch('/api/fulfill-deep-dive', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ firstName, email, report }),
+                        body: JSON.stringify({ firstName, email, report, freeToken }),
                         keepalive: true,
                     });
                 } catch (err) { console.warn('fulfill-deep-dive trigger failed:', err); }
@@ -254,7 +273,12 @@ export default function VoiceInterface() {
 
         if (typeof window !== 'undefined') {
             if (tier === null) {
-                window.location.href = '/report';
+                // Free-token users land on /report. Pass the token forward so
+                // the page can verify access server-side before rendering.
+                const url = freeToken
+                    ? `/report?token=${encodeURIComponent(freeToken)}`
+                    : '/report';
+                window.location.href = url;
             } else {
                 const GHL_URLS: Record<number, string> = {
                     1: process.env.NEXT_PUBLIC_GHL_URL_TIER1 || '/processing?tier=1',
@@ -268,24 +292,24 @@ export default function VoiceInterface() {
                 window.location.href = finalUrl;
             }
         }
-    }, [transcript, sessionId, selectedTier]);
+    }, [transcript, sessionId, selectedTier, freeToken, capturedFirstName, capturedEmail]);
 
-    // Auto-trigger submission ONCE when voice ends - replaces the manual button.
-    // Requires emailCaptured (user explicitly submitted the consent form this
-    // session) so we never auto-fulfill using a stale localStorage email.
+    // When voice ends, only auto-fulfill the free Deep Dive if the visitor
+    // arrived via a valid free-access token (existing client). Everyone else
+    // sees the pricing screen and must pay via GHL/Stripe; payment fulfillment
+    // is handled by the GHL webhook.
     useEffect(() => {
         if (callState !== 'ended') return;
         if (hasSubmittedRef.current) return;
         if (!emailCaptured) return;
         if (!capturedEmail || !capturedFirstName) return;
 
-        const isPaid = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'paid';
-        if (isPaid) {
-            setShowPricing(true);
-        } else {
+        if (freeTokenValid) {
             handleLeadSubmit(capturedFirstName, capturedEmail);
+        } else {
+            setShowPricing(true);
         }
-    }, [callState, emailCaptured, capturedEmail, capturedFirstName, handleLeadSubmit]);
+    }, [callState, emailCaptured, capturedEmail, capturedFirstName, freeTokenValid, handleLeadSubmit]);
 
     const startCall = useCallback(async () => {
         try {

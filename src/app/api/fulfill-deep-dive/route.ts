@@ -14,6 +14,16 @@ interface FulfillRequestBody {
   firstName: string;
   email: string;
   report: Record<string, string>;
+  freeToken?: string;
+  internalSecret?: string;
+}
+
+function isAuthorized(body: FulfillRequestBody): boolean {
+  const freeToken = process.env.FREE_DEEP_DIVE_TOKEN || '';
+  const internalSecret = process.env.INTERNAL_FULFILL_SECRET || '';
+  if (internalSecret && body.internalSecret === internalSecret) return true;
+  if (freeToken && body.freeToken === freeToken) return true;
+  return false;
 }
 
 function appUrl(): string {
@@ -132,7 +142,12 @@ async function sendEmail(
 
 export async function POST(req: NextRequest) {
   try {
-    const { firstName, email, report }: FulfillRequestBody = await req.json();
+    const body: FulfillRequestBody = await req.json();
+    const { firstName, email, report } = body;
+
+    if (!isAuthorized(body)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     if (!email || !report) {
       return NextResponse.json({ error: 'Missing email or report' }, { status: 400 });
