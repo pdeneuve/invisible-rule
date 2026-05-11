@@ -147,12 +147,16 @@ export default function VoiceInterface() {
         }
     }, []);
 
-    const handleLeadSubmit = useCallback(async (firstName: string, email: string) => {
+    const handleLeadSubmit = useCallback(async (firstName: string, email: string, tierOverride?: 1 | 2 | null) => {
         // Prevent duplicate submissions
         if (hasSubmittedRef.current) return;
         hasSubmittedRef.current = true;
 
-        const tier = selectedTier;
+        // Prefer the explicit argument when the caller already knows the tier
+        // (e.g. pricing screen). selectedTier from state can be stale because
+        // setSelectedTier in the same tick has not yet applied when this
+        // callback fires synchronously after the click.
+        const tier = tierOverride !== undefined ? tierOverride : selectedTier;
         const reportTier: 1 | 2 = tier === 1 ? 1 : 2;
         const transcriptText = transcript
             .map(t => `${t.role === 'user' ? 'USER' : 'GUIDE'}: ${t.text}`)
@@ -781,7 +785,7 @@ export default function VoiceInterface() {
                             setSelectedTier(tier);
                             setShowPricing(false);
                             if (capturedEmail && capturedFirstName) {
-                                handleLeadSubmit(capturedFirstName, capturedEmail);
+                                handleLeadSubmit(capturedFirstName, capturedEmail, tier);
                             }
                         }}
                     />
