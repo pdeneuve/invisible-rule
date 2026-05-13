@@ -26,14 +26,28 @@ export async function POST(req: NextRequest) {
     }, null, 2)
   );
 
+  // Anthropic rejects messages with empty text content blocks. Drop any
+  // message whose content is empty/whitespace (e.g. a placeholder assistant
+  // message left over from a failed stream, or an empty user submission).
+  const sanitizedMessages = messages
+    .filter(m => typeof m.content === 'string' && m.content.trim().length > 0)
+    .map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+
+  if (sanitizedMessages.length === 0) {
+    return Response.json(
+      { error: 'No non-empty messages provided' },
+      { status: 400 }
+    );
+  }
+
   const stream = client.messages.stream({
     model: 'claude-sonnet-4-5',
     max_tokens: 1024,
     system: systemPromptWithState,
-    messages: messages.map(m => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    })),
+    messages: sanitizedMessages,
   });
 
   const encoder = new TextEncoder();

@@ -17,9 +17,13 @@ export async function POST(req: NextRequest) {
   const systemPrompt = systemMessage?.content ||
     VAPI_BOP_SYSTEM_PROMPT.replace('{SESSION_STATE}', JSON.stringify({ phase: 'ORIENTATION' }));
 
-  // Filter to only user/assistant messages for Anthropic
+  // Filter to only user/assistant messages for Anthropic, and drop any
+  // entries with empty content (Anthropic rejects empty text blocks).
   const conversationMessages = messages.filter(
-    (m: { role: string }) => m.role === 'user' || m.role === 'assistant'
+    (m: { role: string; content?: string }) =>
+      (m.role === 'user' || m.role === 'assistant') &&
+      typeof m.content === 'string' &&
+      m.content.trim().length > 0
   );
 
   // Ensure there's at least one message
