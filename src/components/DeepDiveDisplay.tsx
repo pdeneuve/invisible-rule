@@ -124,7 +124,7 @@ export default function DeepDiveDisplay({ report, firstName }: Props) {
     }
   };
 
-  //  Video generation 
+  //  Video generation
   const generateVideo = async () => {
     setVideoState('generating');
     setVideoError(null);
@@ -140,6 +140,18 @@ export default function DeepDiveDisplay({ report, firstName }: Props) {
       }
       const { renderId } = await res.json();
       setVideoState('rendering');
+      // Persist the in-flight render so a refresh or closed tab doesn't lose it.
+      // pollVideoStatus also emails the link to the customer on success.
+      try {
+        const lead = localStorage.getItem('bop_lead_data');
+        const parsedLead = lead ? JSON.parse(lead) : {};
+        localStorage.setItem('bop_pending_video', JSON.stringify({
+          renderId,
+          email: parsedLead?.email || '',
+          firstName: firstName || parsedLead?.firstName || '',
+          startedAt: Date.now(),
+        }));
+      } catch { /* ignore storage failures */ }
       pollVideoStatus(renderId);
     } catch (err) {
       setVideoError(err instanceof Error ? err.message : 'Video generation failed');
@@ -157,16 +169,60 @@ export default function DeepDiveDisplay({ report, firstName }: Props) {
           clearInterval(videoPollerRef.current!);
           setVideoUrl(data.url);
           setVideoState('ready');
+          // Email the customer the video link and clear the pending marker so a
+          // closed tab still results in a delivered video.
+          try {
+            const raw = localStorage.getItem('bop_pending_video');
+            if (raw) {
+              const pending = JSON.parse(raw);
+              if (pending?.email) {
+                fetch('/api/send-video-link', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    firstName: pending.firstName,
+                    email: pending.email,
+                    videoUrl: data.url,
+                  }),
+                }).catch(() => {});
+              }
+            }
+            localStorage.removeItem('bop_pending_video');
+          } catch { /* ignore */ }
         } else if (data.status === 'failed') {
           clearInterval(videoPollerRef.current!);
           setVideoError(data.errorMessage || 'Render failed');
           setVideoState('error');
+          try { localStorage.removeItem('bop_pending_video'); } catch { /* ignore */ }
         }
       } catch {
         // keep polling on transient errors
       }
     }, 5000);
   };
+
+  // Resume any in-flight render after a refresh or returning to the tab. We
+  // check on mount before the auto-trigger effect can start a fresh render.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem('bop_pending_video');
+      if (!raw) return;
+      const pending = JSON.parse(raw);
+      if (!pending?.renderId) return;
+      // Discard pending renders older than 1 hour so we never poll forever.
+      const ageMs = Date.now() - (pending.startedAt || 0);
+      if (ageMs > 60 * 60 * 1000) {
+        localStorage.removeItem('bop_pending_video');
+        return;
+      }
+      setVideoState('rendering');
+      pollVideoStatus(pending.renderId);
+    } catch {
+      try { localStorage.removeItem('bop_pending_video'); } catch { /* ignore */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Clean up poller on unmount
   useEffect(() => {
