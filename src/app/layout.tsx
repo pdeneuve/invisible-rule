@@ -5,6 +5,7 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://invisible-rule.vercel.app'),
   title: 'The Invisible Rule',
   description: 'A belief you have carried most of your life is still making your choices for you. And you have no idea it is there.',
   openGraph: {
