@@ -1,0 +1,23 @@
+# dependencies
+node_modules
+/.pnp
+.pnp.*
+
+# build output
+.next/
+out/
+build/
+
+# env files
+.env
+.env.*
+!.env.example
+
+# vercel
+.vercel
+
+# misc
+.DS_Store
+*.pem
+*.log
+*.tsbuildinfo
