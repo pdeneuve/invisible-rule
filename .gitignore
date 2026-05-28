@@ -2,6 +2,9 @@
 node_modules
 /.pnp
 .pnp.*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
 # build output
 .next/
