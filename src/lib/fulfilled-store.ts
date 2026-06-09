@@ -1,4 +1,4 @@
-import { put, list } from '@vercel/blob';
+import { put, head } from '@vercel/blob';
 import crypto from 'crypto';
 
 /**
@@ -6,7 +6,9 @@ import crypto from 'crypto';
  * sessionId) triple, so duplicate triggers (browser retry + webhook retry +
  * save-session pending) can short-circuit cleanly.
  *
- * Keys are hashed and stored privately on Vercel Blob.
+ * We use `head()` for the existence check rather than `list()` because
+ * Vercel Blob's `list()` is eventually consistent and a fast retry can
+ * miss a marker that was just written.
  */
 
 function emailHash(email: string): string {
@@ -29,9 +31,10 @@ export async function isAlreadyFulfilled(
   if (!email || !sessionId) return false;
   const key = fulfillmentKey(email, tier, sessionId);
   try {
-    const { blobs } = await list({ prefix: key, limit: 1 });
-    return blobs.some(b => b.pathname === key);
+    const info = await head(key, { token: process.env.BLOB_READ_WRITE_TOKEN });
+    return !!info;
   } catch {
+    // head() throws when the blob does not exist.
     return false;
   }
 }

@@ -2,24 +2,27 @@
  * Save the user's voice session and (optionally) trigger fulfillment.
  *
  * Browser-callable. We protect against drive-by abuse with:
- *   - Origin check (CORS-style; must come from our domain)
+ *   - Origin/Referer check (must come from one of our hosts)
  *   - Per-IP rate limit
  *   - Minimum transcript length (rejects obviously empty/fake payloads)
  *
  * The browser tells us how to fulfill via the `mode` field:
- *   - 'free'    → trigger /api/fulfill-deep-dive
- *   - 'pending' → look up pending payment, verify tier matches, fulfill, delete
- *   - 'paid'    → save only (GHL webhook will fulfill after payment)
+ *   - 'free'    → trigger /api/fulfill-deep-dive (full Deep Dive)
+ *   - 'pending' → look up the actual paid tier in pending-store, fulfill
+ *                 that tier, then delete pending. Never trusts the browser's
+ *                 claimed tier — server is authoritative.
+ *   - 'paid'    → save only (GHL webhook will fulfill after payment).
  *
- * Fulfillment is server-to-server (Authorization: Bearer), so the browser
- * never touches the heavy internal endpoints.
+ * /api/fulfill-deep-dive responds quickly and runs the heavy work in an
+ * `after()` continuation, so we can await it without blocking the user's
+ * redirect.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { saveSession, StoredSession } from '@/lib/session-store';
 import { getPending, deletePending } from '@/lib/pending-store';
 import {
-  verifyOriginOrSameSite,
+  verifyBrowserOrigin,
   rateLimit,
   getClientIp,
   internalAuthHeader,
@@ -30,7 +33,7 @@ interface SaveSessionBody extends Partial<StoredSession> {
   tier?: 1 | 2 | null;
 }
 
-const MIN_TRANSCRIPT_LENGTH = 50; // bytes; below this is almost certainly a fake call
+const MIN_TRANSCRIPT_LENGTH = 50;
 
 function appUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL || 'https://invisible-rule.vercel.app';
@@ -66,14 +69,14 @@ async function triggerFulfillDeepDive(
   const auth = internalAuthHeader();
   if (!auth) return false;
   try {
-    // Fire and forget for the long Deep Dive pipeline. The downstream function
-    // has its own maxDuration and idempotency check; we don't block the user.
-    fetch(`${appUrl()}/api/fulfill-deep-dive`, {
+    // fulfill-deep-dive returns fast (queues work via after()), so we can
+    // safely await without blocking the user.
+    const res = await fetch(`${appUrl()}/api/fulfill-deep-dive`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
       body: JSON.stringify({ firstName, email, report, sessionId }),
-    }).catch(err => console.error('fulfill-deep-dive fire-and-forget failed:', err));
-    return true;
+    });
+    return res.ok;
   } catch (err) {
     console.error('triggerFulfillDeepDive error:', err);
     return false;
@@ -81,7 +84,7 @@ async function triggerFulfillDeepDive(
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifyOriginOrSameSite(req)) {
+  if (!verifyBrowserOrigin(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
@@ -130,7 +133,13 @@ export async function POST(req: NextRequest) {
   }
 
   const mode: 'free' | 'pending' | 'paid' = body.mode === 'pending' || body.mode === 'paid' ? body.mode : 'free';
-  const claimedTier = body.tier;
+
+  // Server-to-server auth is required for any fulfillment path. If the secret
+  // is missing, return 500 so ops sees it — never silently drop the user.
+  if (mode !== 'paid' && !internalAuthHeader()) {
+    console.error('save-session: INTERNAL_API_SECRET missing; fulfillment unavailable');
+    return NextResponse.json({ error: 'misconfigured' }, { status: 500 });
+  }
 
   if (mode === 'paid') {
     // The GHL webhook is the source of truth for paid fulfillment.
@@ -138,46 +147,29 @@ export async function POST(req: NextRequest) {
   }
 
   if (mode === 'pending') {
-    // Verify the claimed pending tier matches what was actually paid.
+    // Verify the user actually paid by looking up the server-side record.
+    // The browser's claimed tier (from ?pending=N URL) is NOT trusted.
     const pending = await getPending(session.email);
     if (!pending) {
-      // No paid record found. Fall back to free fulfillment so the user isn't
-      // stranded if the pending record was already cleaned up.
-      const ok = await triggerFulfillDeepDive(
-        session.firstName,
-        session.email,
-        session.report,
-        session.sessionId,
+      // No verified payment. Refuse to fulfill — don't hand out a free product.
+      console.warn(
+        `save-session: ?pending= requested for ${session.email} but no pending record found; refusing`,
       );
-      return NextResponse.json({ success: true, fulfilled: ok, mode: 'free-fallback' });
+      return NextResponse.json(
+        { success: true, fulfilled: false, reason: 'no-pending-payment' },
+      );
     }
 
-    if (claimedTier !== pending.tier) {
-      console.warn(
-        `save-session: claimed tier ${claimedTier} doesn't match paid tier ${pending.tier} for ${session.email}`,
-      );
-    }
-    const tier = pending.tier;
-    let ok = false;
-    if (tier === 1) {
-      ok = await triggerSendReport(
-        session.firstName,
-        session.email,
-        session.report,
-        session.sessionId,
-      );
-    } else {
-      ok = await triggerFulfillDeepDive(
-        session.firstName,
-        session.email,
-        session.report,
-        session.sessionId,
-      );
-    }
+    const paidTier = pending.tier;
+    const ok =
+      paidTier === 1
+        ? await triggerSendReport(session.firstName, session.email, session.report, session.sessionId)
+        : await triggerFulfillDeepDive(session.firstName, session.email, session.report, session.sessionId);
+
     if (ok) {
       await deletePending(session.email);
     }
-    return NextResponse.json({ success: true, fulfilled: ok, tier });
+    return NextResponse.json({ success: true, fulfilled: ok, tier: paidTier });
   }
 
   // mode === 'free'

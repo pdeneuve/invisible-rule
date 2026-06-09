@@ -1,23 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { VAPI_BOP_SYSTEM_PROMPT } from '@/lib/vapi-prompt';
-import { rateLimit, getClientIp } from '@/lib/auth';
+import { rateLimit, getClientIp, verifyVapiSecret } from '@/lib/auth';
 
 // VAPI Custom LLM endpoint — receives messages from VAPI, returns OpenAI-compatible SSE stream.
 // This lets VAPI handle voice (STT + TTS) while we handle the AI using our Anthropic key.
 
-function verifyVapi(req: NextRequest): boolean {
-  // VAPI sends a configurable Authorization header on custom-LLM calls. We require it
-  // match VAPI_SHARED_SECRET so this endpoint isn't a free Claude proxy.
-  const expected = process.env.VAPI_SHARED_SECRET;
-  if (!expected) return false;
-  const auth = req.headers.get('authorization') || '';
-  const provided = auth.startsWith('Bearer ') ? auth.slice(7) : auth;
-  return provided === expected;
-}
-
 export async function POST(req: NextRequest) {
-  if (!verifyVapi(req)) {
+  if (!verifyVapiSecret(req)) {
     // Soft rate limit on unauthorized hits so this can't be enumerated for free
     rateLimit(`vapi-llm-unauth:${getClientIp(req)}`, 3);
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });

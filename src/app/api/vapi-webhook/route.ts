@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-function verifyVapi(req: NextRequest): boolean {
-  const expected = process.env.VAPI_SHARED_SECRET;
-  if (!expected) return false;
-  const auth = req.headers.get('authorization') || '';
-  const provided = auth.startsWith('Bearer ') ? auth.slice(7) : auth;
-  return provided === expected;
-}
+import { verifyVapiSecret } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
-  if (!verifyVapi(req)) {
+  if (!verifyVapiSecret(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 

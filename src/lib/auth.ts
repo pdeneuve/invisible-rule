@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 
-const constantTimeEquals = (a: string, b: string): boolean => {
+export const constantTimeEquals = (a: string, b: string): boolean => {
   if (a.length !== b.length) return false;
   let mismatch = 0;
   for (let i = 0; i < a.length; i++) {
@@ -47,25 +47,63 @@ export function internalAuthHeader(): string | null {
   return secret ? `Bearer ${secret}` : null;
 }
 
+function allowedOrigins(): string[] {
+  return [
+    process.env.NEXT_PUBLIC_APP_URL,
+    'https://invisible-rule.vercel.app',
+    'https://theinvisiblerule.com',
+    'https://www.theinvisiblerule.com',
+    'http://localhost:3000',
+  ].filter(Boolean) as string[];
+}
+
+function refererMatches(referer: string, allowed: string[]): boolean {
+  try {
+    const url = new URL(referer);
+    const origin = `${url.protocol}//${url.host}`;
+    return allowed.includes(origin);
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Loose origin check for browser-callable endpoints. Accepts our known
- * production hosts and localhost. Returns true if the request has no
- * Origin header (server-to-server fetch) so internal calls still pass;
- * pair with verifyInternalSecret for sensitive ops.
+ * Origin/Referer check for browser-callable POST endpoints.
+ *
+ * Requires either:
+ *   - an Origin header matching one of our hosts, OR
+ *   - a Referer header whose origin matches one of our hosts.
+ *
+ * Rejects requests with NEITHER (e.g. curl-style cross-script abuse).
+ *
+ * Internal server-to-server callers should use verifyInternalSecret instead;
+ * this helper is for endpoints that are reachable from the browser.
  */
-export function verifyOriginOrSameSite(req: NextRequest): boolean {
+export function verifyBrowserOrigin(req: NextRequest): boolean {
+  const allowed = allowedOrigins();
   const origin = req.headers.get('origin');
-  if (!origin) return true;
-  const allowed = new Set(
-    [
-      process.env.NEXT_PUBLIC_APP_URL,
-      'https://invisible-rule.vercel.app',
-      'https://theinvisiblerule.com',
-      'https://www.theinvisiblerule.com',
-      'http://localhost:3000',
-    ].filter(Boolean) as string[],
-  );
-  return allowed.has(origin);
+  if (origin) return allowed.includes(origin);
+  const referer = req.headers.get('referer');
+  if (referer) return refererMatches(referer, allowed);
+  return false;
+}
+
+/** Legacy alias retained so existing call sites keep working. */
+export const verifyOriginOrSameSite = verifyBrowserOrigin;
+
+/**
+ * Verifies the Authorization header VAPI sends on custom-LLM and webhook calls.
+ * VAPI is configured to send Bearer VAPI_SHARED_SECRET.
+ */
+export function verifyVapiSecret(req: NextRequest): boolean {
+  const expected = process.env.VAPI_SHARED_SECRET;
+  if (!expected) {
+    console.error('VAPI_SHARED_SECRET env var is not set');
+    return false;
+  }
+  const auth = req.headers.get('authorization') || '';
+  const provided = auth.startsWith('Bearer ') ? auth.slice(7) : auth;
+  return constantTimeEquals(expected, provided);
 }
 
 export function getClientIp(req: NextRequest): string {

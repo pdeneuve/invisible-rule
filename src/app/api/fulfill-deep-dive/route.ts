@@ -6,10 +6,16 @@
  * and pending Tier 2). Generates the full Deep Dive package (audio + slides +
  * video render submission) and emails everything via /api/send-report.
  *
+ * Architecture: the heavy work is scheduled via `after()` so this route can
+ * respond to the caller quickly (sub-second) while the actual 10-minute
+ * fulfillment runs in a continuation that Vercel keeps alive after the
+ * response. This is what lets save-session await us without blocking the
+ * user's redirect.
+ *
  * Idempotency: per (email, tier=2, sessionId). Duplicate triggers short-circuit.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { put } from '@vercel/blob';
 import crypto from 'crypto';
 import { verifyInternalSecret, internalAuthHeader } from '@/lib/auth';
@@ -152,55 +158,64 @@ async function sendEmail(
   }
 }
 
-export async function POST(req: NextRequest) {
-  if (!verifyInternalSecret(req)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
-
+async function runFulfillment(body: FulfillRequestBody): Promise<void> {
+  const { firstName, email, report, sessionId } = body;
   try {
-    const { firstName, email, report, sessionId }: FulfillRequestBody = await req.json();
-
-    if (!email || !report) {
-      return NextResponse.json({ error: 'Missing email or report' }, { status: 400 });
-    }
-
-    // Idempotency: same (email, tier 2, sessionId) is only fulfilled once.
-    if (sessionId && (await isAlreadyFulfilled(email, 2, sessionId))) {
-      console.log(`fulfill-deep-dive: already fulfilled for ${email} session ${sessionId}`);
-      return NextResponse.json({ success: true, idempotent: true });
-    }
-
     const [audioUrl, videoRenderId, slidesUrl] = await Promise.all([
       generateAndUploadAudio(report, firstName),
       submitVideoRender(report, firstName),
       generateAndUploadSlides(report, firstName),
     ]);
-
     const videoStatusUrl = videoRenderId ? `${appUrl()}/video/${videoRenderId}` : null;
-
-    const emailed = await sendEmail(firstName, email, report, sessionId, audioUrl, videoStatusUrl, slidesUrl);
-
-    if (!emailed) {
-      // The email is the deliverable; if it failed, surface the error so the
-      // caller (webhook or save-session) can retry.
-      return NextResponse.json(
-        { success: false, error: 'email-send-failed', audioUrl, videoRenderId, slidesUrl },
-        { status: 500 },
-      );
-    }
-
-    if (sessionId) await markFulfilled(email, 2, sessionId);
-
-    return NextResponse.json({
-      success: true,
+    const emailed = await sendEmail(
+      firstName,
+      email,
+      report,
+      sessionId,
       audioUrl,
-      videoRenderId,
       videoStatusUrl,
       slidesUrl,
-      degraded: !audioUrl || !videoRenderId || !slidesUrl,
-    });
+    );
+    if (emailed && sessionId) {
+      try {
+        await markFulfilled(email, 2, sessionId);
+      } catch (err) {
+        console.error('markFulfilled error (email already sent):', err);
+      }
+    } else if (!emailed) {
+      console.error('Deep Dive: email send failed; not marking fulfilled so retry is possible');
+    }
   } catch (err) {
-    console.error('fulfill-deep-dive error:', err);
-    return NextResponse.json({ error: 'Fulfillment failed' }, { status: 500 });
+    console.error('runFulfillment error:', err);
   }
+}
+
+export async function POST(req: NextRequest) {
+  if (!verifyInternalSecret(req)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  let body: FulfillRequestBody;
+  try {
+    body = (await req.json()) as FulfillRequestBody;
+  } catch {
+    return NextResponse.json({ error: 'invalid body' }, { status: 400 });
+  }
+
+  if (!body.email || !body.report) {
+    return NextResponse.json({ error: 'Missing email or report' }, { status: 400 });
+  }
+
+  // Idempotency: same (email, tier 2, sessionId) is only fulfilled once.
+  if (body.sessionId && (await isAlreadyFulfilled(body.email, 2, body.sessionId))) {
+    console.log(`fulfill-deep-dive: already fulfilled for ${body.email} session ${body.sessionId}`);
+    return NextResponse.json({ success: true, idempotent: true });
+  }
+
+  // Respond to the caller immediately; do the 10-minute work in a continuation
+  // that Vercel keeps alive after the response. This is the only safe pattern
+  // for "fire and let it cook" on serverless.
+  after(() => runFulfillment(body));
+
+  return NextResponse.json({ success: true, queued: true });
 }

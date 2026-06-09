@@ -41,6 +41,9 @@ export async function POST(req: NextRequest) {
   }
 
   const safeName = escapeHtml(firstName || 'Friend');
+  // Strip control chars from anything that goes into the Subject header to
+  // prevent CR/LF injection of additional headers (BCC etc).
+  const subjectName = (firstName || 'Friend').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 80);
   const fromAddress = process.env.RESEND_FROM_EMAIL || 'The Invisible Rule <pamela@theinvisiblerule.com>';
 
   const header = (tierLabel: string) => `
@@ -124,11 +127,14 @@ export async function POST(req: NextRequest) {
       const { data, error } = await resend.emails.send({
         from: fromAddress,
         to: email,
-        subject: `${firstName || 'Friend'}, your Invisible Rule is here`,
+        subject: `${subjectName}, your Invisible Rule is here`,
         html,
       });
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      if (sessionId) await markFulfilled(email, 1, sessionId);
+      if (sessionId) {
+        try { await markFulfilled(email, 1, sessionId); }
+        catch (err) { console.error('markFulfilled error (email already sent):', err); }
+      }
       return NextResponse.json({ success: true, id: data?.id });
     } catch (err) {
       console.error('Send First Light email error:', err);
@@ -193,11 +199,14 @@ export async function POST(req: NextRequest) {
     const { data, error } = await resend.emails.send({
       from: fromAddress,
       to: email,
-      subject: `${firstName || 'Friend'}, your Deep Dive is ready`,
+      subject: `${subjectName}, your Deep Dive is ready`,
       html,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (sessionId) await markFulfilled(email, 2, sessionId);
+    if (sessionId) {
+      try { await markFulfilled(email, 2, sessionId); }
+      catch (err) { console.error('markFulfilled error (email already sent):', err); }
+    }
     return NextResponse.json({ success: true, id: data?.id });
   } catch (err) {
     console.error('Send Deep Dive email error:', err);

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyInternalSecret } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
+  // Internal tool — never exposed to the browser. Gate behind both the
+  // internal bearer AND the test-mode flag so accidental misconfig doesn't
+  // open the ElevenLabs proxy in production.
+  if (process.env.TEST_MODE_ENABLED !== 'true' || !verifyInternalSecret(req)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: 'ELEVENLABS_API_KEY not configured' }, { status: 500 });

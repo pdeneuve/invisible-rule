@@ -1,5 +1,6 @@
 import { put } from '@vercel/blob';
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyBrowserOrigin, rateLimit, getClientIp } from '@/lib/auth';
 
 export const runtime = 'edge';
 
@@ -8,6 +9,12 @@ function sanitizeKey(email: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  if (!verifyBrowserOrigin(req)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+  if (!rateLimit(`mastery-save:${getClientIp(req)}`, 20)) {
+    return NextResponse.json({ error: 'rate limited' }, { status: 429 });
+  }
   try {
     const body = await req.json();
     const { email, chapter, data } = body;

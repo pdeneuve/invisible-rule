@@ -272,13 +272,19 @@ export async function POST(req: NextRequest) {
         orderId: orderId || undefined,
         paidAt: new Date().toISOString(),
       });
-      await sendNoSessionEmail(resend, email, firstName, tier);
-      // Mark the order processed so GHL retries don't re-trigger this branch.
-      // Fulfillment will happen when the user completes their voice session.
-      if (orderId) await markOrderProcessed(orderId);
+      let nudgeOk = true;
+      try {
+        await sendNoSessionEmail(resend, email, firstName, tier);
+      } catch (err) {
+        nudgeOk = false;
+        console.error('sendNoSessionEmail failed:', err);
+      }
+      // Only mark the order processed if the nudge email actually went out.
+      // Otherwise let GHL retry so the customer hears from us.
+      if (orderId && nudgeOk) await markOrderProcessed(orderId);
       return NextResponse.json(
-        { received: true, tier, fulfilled: false, reason: 'pending-session' },
-        { status: 200 },
+        { received: nudgeOk, tier, fulfilled: false, reason: 'pending-session' },
+        { status: nudgeOk ? 200 : 500 },
       );
     }
 

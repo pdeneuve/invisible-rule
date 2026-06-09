@@ -1,12 +1,21 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { BOP_SYSTEM_PROMPT } from '@/lib/bop-system-prompt';
 import { SessionState } from '@/lib/types';
+import { verifyBrowserOrigin, rateLimit, getClientIp } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
-  const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY!,
-  });
+  if (!verifyBrowserOrigin(req)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+  if (!rateLimit(`bop-chat:${getClientIp(req)}`, 20)) {
+    return NextResponse.json({ error: 'rate limited' }, { status: 429 });
+  }
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: 'AI not configured' }, { status: 500 });
+  }
+  const client = new Anthropic({ apiKey });
 
   const { messages, sessionState }: { messages: Array<{role: string; content: string}>; sessionState: SessionState } = await req.json();
 

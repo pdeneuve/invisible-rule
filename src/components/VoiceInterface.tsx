@@ -65,7 +65,15 @@ export default function VoiceInterface() {
     // while the user is typing into the form so their typing doesn't pollute
     // the conversation transcript.
     const mutedForCaptureRef = useRef(false);
+    // Fresh-value refs for state that the long-lived vapi.on('message') closure
+    // needs to read. State variables in the closure would go stale because the
+    // listener is registered once at startCall and never re-bound.
+    const capturedEmailRef = useRef('');
+    const isMutedRef = useRef(false);
     const CAPTURE_AFTER_USER_MESSAGES = 3;
+
+    useEffect(() => { capturedEmailRef.current = capturedEmail; }, [capturedEmail]);
+    useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
 
     // Stricter email check than the obviously-permissive default; we accept
     // a single label TLD (e.g. example.local) so common dev addresses still pass.
@@ -307,7 +315,7 @@ export default function VoiceInterface() {
                 window.location.href = ghlUrl;
             }
         }
-    }, [transcript, sessionId, capturedFirstName, capturedEmail]);
+    }, [transcript, sessionId]);
 
     // If the user ends the call without filling the mid-session capture modal,
     // surface it now so we can still email them their report.
@@ -475,11 +483,12 @@ export default function VoiceInterface() {
                     // talking to themselves) doesn't pollute the transcript.
                     if (
                         userMessageCountRef.current === CAPTURE_AFTER_USER_MESSAGES &&
-                        !capturedEmail
+                        !capturedEmailRef.current
                     ) {
-                        if (vapiRef.current && !isMuted) {
+                        if (vapiRef.current && !isMutedRef.current) {
                             try { vapiRef.current.setMuted(true); } catch { /* ignore */ }
                             mutedForCaptureRef.current = true;
+                            isMutedRef.current = true;
                             setIsMuted(true);
                         }
                         setShowCaptureModal(true);
@@ -859,7 +868,16 @@ export default function VoiceInterface() {
 
                         {callState !== 'ended' && (
                             <button
-                                onClick={() => setShowCaptureModal(false)}
+                                onClick={() => {
+                                    // Restore the mic if we muted it to show the modal.
+                                    if (mutedForCaptureRef.current && vapiRef.current) {
+                                        try { vapiRef.current.setMuted(false); } catch { /* ignore */ }
+                                        isMutedRef.current = false;
+                                        setIsMuted(false);
+                                    }
+                                    mutedForCaptureRef.current = false;
+                                    setShowCaptureModal(false);
+                                }}
                                 className="absolute top-4 right-4 text-slate-500 hover:text-slate-300"
                                 title="Close"
                             >
