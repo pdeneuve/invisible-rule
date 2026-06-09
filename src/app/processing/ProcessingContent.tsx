@@ -6,45 +6,92 @@ import FirstLightDisplay from '@/components/FirstLightDisplay';
 import DeepDiveDisplay from '@/components/DeepDiveDisplay';
 import Link from 'next/link';
 
+interface SessionEnvelope<T> {
+  sessionId?: string;
+  payload?: T;
+}
+
 export default function ProcessingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tierParam = searchParams.get('tier');
   const tier: 1 | 2 | null = tierParam ? (parseInt(tierParam) as 1 | 2) : null;
+  const sidFromUrl = searchParams.get('sid');
+
   const [report, setReport] = useState<Record<string, string> | null>(null);
   const [firstName, setFirstName] = useState('');
+  const [stale, setStale] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const reportData = localStorage.getItem('bop_report_a') || sessionStorage.getItem('bop_report_a');
-      const leadData = localStorage.getItem('bop_lead_data') || sessionStorage.getItem('bop_lead_data');
+    if (typeof window === 'undefined') return;
 
-      if (!reportData && !leadData) {
+    const reportRaw = localStorage.getItem('bop_report_a');
+    const leadRaw = localStorage.getItem('bop_lead_data');
+
+    // Reached /processing with no fresh session data — almost always means the
+    // user followed a payment confirmation link, not a redirect from a voice
+    // session. The email is the primary delivery; show a clean fallback.
+    if (!reportRaw || !sidFromUrl) {
+      if (!reportRaw && !leadRaw && !sidFromUrl) {
         router.push('/');
         return;
       }
-
-      if (reportData) {
-        try {
-          const parsed = JSON.parse(reportData);
-          if (parsed) setReport(parsed);
-        } catch { /* malformed */ }
-      }
-      if (leadData) {
-        try {
-          setFirstName(JSON.parse(leadData).firstName);
-        } catch { /* ignore */ }
-      }
+      setStale(true);
+      return;
     }
-  }, [router]);
+
+    let reportEnv: SessionEnvelope<Record<string, string>> | null = null;
+    try { reportEnv = JSON.parse(reportRaw); } catch { /* malformed */ }
+
+    if (!reportEnv || reportEnv.sessionId !== sidFromUrl || !reportEnv.payload) {
+      // Stored report belongs to a different (older) session.
+      localStorage.removeItem('bop_report_a');
+      localStorage.removeItem('bop_lead_data');
+      setStale(true);
+      return;
+    }
+
+    setReport(reportEnv.payload);
+
+    if (leadRaw) {
+      try {
+        const leadEnv: SessionEnvelope<{ firstName?: string }> = JSON.parse(leadRaw);
+        if (leadEnv.sessionId === sidFromUrl && leadEnv.payload?.firstName) {
+          setFirstName(leadEnv.payload.firstName);
+        }
+      } catch { /* ignore */ }
+    }
+  }, [router, sidFromUrl]);
 
   useEffect(() => {
-    if (!report) {
+    if (!report && !stale) {
       const t = setTimeout(() => setTimedOut(true), 15000);
       return () => clearTimeout(t);
     }
-  }, [report]);
+  }, [report, stale]);
+
+  if (stale) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
+        <div className="text-center max-w-sm">
+          <div
+            className="w-14 h-14 rounded-full mx-auto mb-5 flex items-center justify-center"
+            style={{ background: 'radial-gradient(circle at 40% 40%, #fbbf24, #d97706)' }}
+          >
+            <span className="text-slate-900 font-bold">IR</span>
+          </div>
+          <h1 className="text-xl font-light text-white mb-2">Your report is on its way.</h1>
+          <p className="text-slate-400 text-sm mb-6">
+            Check your email — your report has been delivered there.
+          </p>
+          <Link href="/" className="text-amber-400 text-sm underline">
+            Start a new session
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (!report) {
     return (

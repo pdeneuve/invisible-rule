@@ -41,11 +41,10 @@ export default function VoiceInterface() {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [connectionTimedOut, setConnectionTimedOut] = useState(false);
 
-    // Email captured before voice session
-    const [emailCaptured, setEmailCaptured] = useState(false);
+    // Captured during the session (mid-conversation modal), not persisted across visits
     const [capturedFirstName, setCapturedFirstName] = useState('');
     const [capturedEmail, setCapturedEmail] = useState('');
-    const [showEarlyCapture, setShowEarlyCapture] = useState(false);
+    const [showCaptureModal, setShowCaptureModal] = useState(false);
     const [earlyName, setEarlyName] = useState('');
     const [earlyEmail, setEarlyEmail] = useState('');
     const [earlyError, setEarlyError] = useState('');
@@ -58,17 +57,9 @@ export default function VoiceInterface() {
     const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Submit-lock so fulfillment never runs more than once per session
     const hasSubmittedRef = useRef(false);
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const ce = localStorage.getItem('captured_email');
-        const cf = localStorage.getItem('captured_firstName');
-        if (ce && cf) {
-            setCapturedEmail(ce);
-            setCapturedFirstName(cf);
-            setEmailCaptured(true);
-        }
-    }, []);
+    // Count of user turns; triggers the mid-session capture modal at threshold
+    const userMessageCountRef = useRef(0);
+    const CAPTURE_AFTER_USER_MESSAGES = 3;
 
     useEffect(() => {
         if (transcriptRef.current) {
@@ -207,9 +198,11 @@ export default function VoiceInterface() {
         }
 
         if (typeof window !== 'undefined') {
-            localStorage.setItem('bop_report_a', JSON.stringify(report));
-            localStorage.setItem('bop_lead_data', JSON.stringify(leadData));
-            localStorage.setItem('bop_tier', String(tier));
+            // Wrap with sessionId so /report and /processing can verify the
+            // data belongs to *this* session and never show stale content
+            // from a previous session in the same browser.
+            localStorage.setItem('bop_report_a', JSON.stringify({ sessionId, payload: report }));
+            localStorage.setItem('bop_lead_data', JSON.stringify({ sessionId, payload: leadData }));
         }
 
         if (report) {
@@ -282,14 +275,14 @@ export default function VoiceInterface() {
                 testParam === 'firstlight' || testParam === 'deepdive';
 
             if (tier === null) {
-                window.location.href = '/report';
+                window.location.href = `/report?sid=${sessionId}`;
             } else if (isPending) {
                 // User already paid; show their processing/results page instead of GHL.
-                window.location.href = `/processing?tier=${tier}`;
+                window.location.href = `/processing?tier=${tier}&sid=${sessionId}`;
             } else {
                 const GHL_URLS: Record<number, string> = {
-                    1: process.env.NEXT_PUBLIC_GHL_URL_TIER1 || '/processing?tier=1',
-                    2: process.env.NEXT_PUBLIC_GHL_URL_TIER2 || '/processing?tier=2',
+                    1: process.env.NEXT_PUBLIC_GHL_URL_TIER1 || `/processing?tier=1&sid=${sessionId}`,
+                    2: process.env.NEXT_PUBLIC_GHL_URL_TIER2 || `/processing?tier=2&sid=${sessionId}`,
                     3: process.env.NEXT_PUBLIC_GHL_URL_TIER3 || '/mastery',
                 };
                 const baseUrl = GHL_URLS[tier] || '/report';
@@ -300,6 +293,14 @@ export default function VoiceInterface() {
             }
         }
     }, [transcript, sessionId, capturedFirstName, capturedEmail]);
+
+    // If the user ends the call without filling the mid-session capture modal,
+    // surface it now so we can still email them their report.
+    useEffect(() => {
+        if (callState === 'ended' && !capturedEmail) {
+            setShowCaptureModal(true);
+        }
+    }, [callState, capturedEmail]);
 
     // Auto-trigger submission ONCE when voice ends - replaces the manual button
     useEffect(() => {
@@ -365,12 +366,22 @@ export default function VoiceInterface() {
         if (typeof window !== 'undefined') {
             localStorage.removeItem('bop_report_a');
             localStorage.removeItem('bop_lead_data');
+            localStorage.removeItem('bop_tier');
+            localStorage.removeItem('captured_email');
+            localStorage.removeItem('captured_firstName');
             sessionStorage.removeItem('bop_report_a');
             sessionStorage.removeItem('bop_lead_data');
         }
 
-        // Reset submit lock for a fresh session
+        // Reset submit lock, captured contact, and user-message counter for a fresh session
         hasSubmittedRef.current = false;
+        userMessageCountRef.current = 0;
+        setCapturedFirstName('');
+        setCapturedEmail('');
+        setShowCaptureModal(false);
+        setEarlyName('');
+        setEarlyEmail('');
+        setEarlyError('');
 
         setHasStarted(true);
         setErrorMessage(null);
@@ -437,6 +448,16 @@ export default function VoiceInterface() {
                     checkDistress(text);
                     setCallState('user-speaking');
                     setTimeout(() => setCallState('active'), 500);
+                    userMessageCountRef.current += 1;
+                    // Once the user is a few turns in, surface the capture modal
+                    // so we can email them their report. Voice continues in the
+                    // background — the modal is a calm overlay, not a hard stop.
+                    if (
+                        userMessageCountRef.current === CAPTURE_AFTER_USER_MESSAGES &&
+                        !capturedEmail
+                    ) {
+                        setShowCaptureModal(true);
+                    }
                 }
             }
         });
@@ -482,13 +503,10 @@ export default function VoiceInterface() {
     }, [detectPhase, checkDistress]);
 
     const handleBeginClick = useCallback(() => {
-        if (emailCaptured) {
-            startCall();
-        } else {
-            setShowEarlyCapture(true);
-            setEarlyError('');
-        }
-    }, [emailCaptured, startCall]);
+        // No pre-session gate: start the voice session immediately.
+        // The capture modal will surface a few turns in, or at call end.
+        startCall();
+    }, [startCall]);
 
     const handleEarlyCaptureSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -507,12 +525,7 @@ export default function VoiceInterface() {
 
         setCapturedFirstName(fn);
         setCapturedEmail(em);
-        setEmailCaptured(true);
-
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('captured_email', em);
-            localStorage.setItem('captured_firstName', fn);
-        }
+        setShowCaptureModal(false);
 
         try {
             await fetch('/api/submit-lead', {
@@ -531,10 +544,12 @@ export default function VoiceInterface() {
             console.warn('early submit-lead failed:', err);
         }
 
-        setShowEarlyCapture(false);
+        setShowCaptureModal(false);
         setEarlySubmitting(false);
-        startCall();
-    }, [earlyName, earlyEmail, sessionId, startCall]);
+        // Voice is already running (mid-session) or already ended (post-call) —
+        // do NOT call startCall here; the auto-trigger useEffect will detect
+        // the now-set capturedEmail and run handleLeadSubmit if appropriate.
+    }, [earlyName, earlyEmail, sessionId]);
 
     const handleTryAgain = useCallback(() => {
         setConnectionTimedOut(false);
@@ -628,69 +643,6 @@ export default function VoiceInterface() {
                         If you are in crisis, please contact a mental health professional.
                     </p>
                 </div>
-
-                {showEarlyCapture && (
-                    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-                        <div className="relative bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-8">
-                            <div className="text-center mb-6">
-                                <div className="w-12 h-12 bg-amber-500 rounded-full mx-auto mb-4 flex items-center justify-center">
-                                    <svg className="w-6 h-6 text-slate-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 11-8 0 4 4 0 018 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
-                                    </svg>
-                                </div>
-                                <h2 className="text-2xl font-light text-white mb-2">Before you begin</h2>
-                                <p className="text-slate-400 leading-relaxed">
-                                    Enter your name and email. After your voice session, your full Deep Dive (report, podcast, video, and slides) will arrive in your inbox in about 10 minutes.
-                                </p>
-                            </div>
-
-                            <form onSubmit={handleEarlyCaptureSubmit} className="space-y-4">
-                                <div>
-                                    <label className="block text-slate-300 text-sm mb-2">First Name</label>
-                                    <input
-                                        type="text"
-                                        value={earlyName}
-                                        onChange={e => setEarlyName(e.target.value)}
-                                        placeholder="Your first name"
-                                        className="w-full bg-slate-700 text-white placeholder-slate-400 border border-slate-600 rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500 transition-colors"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-slate-300 text-sm mb-2">Email Address</label>
-                                    <input
-                                        type="email"
-                                        value={earlyEmail}
-                                        onChange={e => setEarlyEmail(e.target.value)}
-                                        placeholder="your@email.com"
-                                        className="w-full bg-slate-700 text-white placeholder-slate-400 border border-slate-600 rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500 transition-colors"
-                                    />
-                                </div>
-
-                                {earlyError && <p className="text-red-400 text-sm">{earlyError}</p>}
-
-                                <button
-                                    type="submit"
-                                    disabled={earlySubmitting}
-                                    className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-900 font-semibold py-4 rounded-xl transition-all duration-200 hover:scale-105 disabled:hover:scale-100"
-                                >
-                                    {earlySubmitting ? 'Starting...' : 'Begin Voice Session'}
-                                </button>
-                                <p className="text-center text-slate-500 text-xs">
-                                    No spam. No selling your data.
-                                </p>
-                            </form>
-
-                            <button
-                                onClick={() => setShowEarlyCapture(false)}
-                                className="absolute top-4 right-4 text-slate-500 hover:text-slate-300"
-                            >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                )}
             </div>
         );
     }
@@ -816,6 +768,76 @@ export default function VoiceInterface() {
             )}
 
             {showSafety && <SafetyModal onClose={() => setShowSafety(false)} />}
+
+            {showCaptureModal && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+                    <div className="relative bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-8">
+                        <div className="text-center mb-6">
+                            <div className="w-12 h-12 bg-amber-500 rounded-full mx-auto mb-4 flex items-center justify-center">
+                                <svg className="w-6 h-6 text-slate-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 11-8 0 4 4 0 018 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                                </svg>
+                            </div>
+                            <h2 className="text-2xl font-light text-white mb-2">
+                                {callState === 'ended' ? 'One last thing' : 'Where should we send your report?'}
+                            </h2>
+                            <p className="text-slate-400 leading-relaxed">
+                                {callState === 'ended'
+                                    ? 'Enter your name and email so we can deliver your personalized report. Your voice session has been captured.'
+                                    : 'Your voice session is in progress. Drop your name and email here and your full report will be in your inbox shortly after we wrap.'}
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleEarlyCaptureSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-slate-300 text-sm mb-2">First Name</label>
+                                <input
+                                    type="text"
+                                    value={earlyName}
+                                    onChange={e => setEarlyName(e.target.value)}
+                                    placeholder="Your first name"
+                                    className="w-full bg-slate-700 text-white placeholder-slate-400 border border-slate-600 rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500 transition-colors"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-slate-300 text-sm mb-2">Email Address</label>
+                                <input
+                                    type="email"
+                                    value={earlyEmail}
+                                    onChange={e => setEarlyEmail(e.target.value)}
+                                    placeholder="your@email.com"
+                                    className="w-full bg-slate-700 text-white placeholder-slate-400 border border-slate-600 rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500 transition-colors"
+                                />
+                            </div>
+
+                            {earlyError && <p className="text-red-400 text-sm">{earlyError}</p>}
+
+                            <button
+                                type="submit"
+                                disabled={earlySubmitting}
+                                className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-900 font-semibold py-4 rounded-xl transition-all duration-200 hover:scale-105 disabled:hover:scale-100"
+                            >
+                                {earlySubmitting ? 'Saving...' : (callState === 'ended' ? 'Deliver my report' : 'Continue session')}
+                            </button>
+                            <p className="text-center text-slate-500 text-xs">
+                                No spam. No selling your data.
+                            </p>
+                        </form>
+
+                        {callState !== 'ended' && (
+                            <button
+                                onClick={() => setShowCaptureModal(false)}
+                                className="absolute top-4 right-4 text-slate-500 hover:text-slate-300"
+                                title="Close"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {showPricing && (
                 <div className="fixed inset-0 z-50 overflow-y-auto">
