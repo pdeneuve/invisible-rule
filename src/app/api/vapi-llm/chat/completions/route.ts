@@ -12,10 +12,13 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { messages = [], stream: shouldStream = true } = body;
 
-  // Extract system message if present, otherwise use our BOP prompt
-  const systemMessage = messages.find((m: { role: string }) => m.role === 'system');
-  const systemPrompt = systemMessage?.content ||
-    VAPI_BOP_SYSTEM_PROMPT.replace('{SESSION_STATE}', JSON.stringify({ phase: 'ORIENTATION' }));
+  // Always use the server-side BOP prompt. Any caller-supplied system message
+  // is ignored — protects against prompt-injection if VAPI's path is ever
+  // tampered with or a different upstream is configured.
+  const systemPrompt = VAPI_BOP_SYSTEM_PROMPT.replace(
+    '{SESSION_STATE}',
+    JSON.stringify({ phase: 'ORIENTATION' }),
+  );
 
   // Filter to only user/assistant messages for Anthropic, and drop any
   // entries with empty content (Anthropic rejects empty text blocks).

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 interface Props {
   onSelectTier: (tier: 1 | 2) => void;
@@ -46,8 +46,13 @@ const TIERS = [
 
 export default function PricingScreen({ onSelectTier }: Props) {
   const [selecting, setSelecting] = useState<number | null>(null);
+  // M1: ref lock — useState alone leaves a window where rapid clicks both
+  // fire onSelectTier before the disabled prop reaches the DOM.
+  const lockRef = useRef(false);
 
   const handleSelect = (tierId: 1 | 2) => {
+    if (lockRef.current) return;
+    lockRef.current = true;
     setSelecting(tierId);
     onSelectTier(tierId);
   };

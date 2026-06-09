@@ -36,7 +36,8 @@ export default function VoiceInterface() {
     const [selectedTier, setSelectedTier] = useState<1 | 2 | null>(null);
     const [showSafety, setShowSafety] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
-    const [sessionId] = useState(() => uuidv4());
+    // Mutable so we can mint a fresh ID for a second session in the same tab (H3).
+    const [sessionId, setSessionId] = useState(() => uuidv4());
     const [callDuration, setCallDuration] = useState(0);
     const [showTranscript, setShowTranscript] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -94,6 +95,23 @@ export default function VoiceInterface() {
             transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
         }
     }, [transcript]);
+
+    // H6: warn before close/refresh during an active voice session.
+    useEffect(() => {
+        const inCall =
+            callState === 'active' ||
+            callState === 'ai-speaking' ||
+            callState === 'user-speaking' ||
+            callState === 'connecting';
+        if (!inCall) return;
+        const handler = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            // Modern browsers ignore the custom string but show their own warning.
+            e.returnValue = '';
+        };
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, [callState]);
 
     useEffect(() => {
         if (callState === 'active' || callState === 'ai-speaking' || callState === 'user-speaking') {
@@ -221,7 +239,13 @@ export default function VoiceInterface() {
             const reportRes = await fetch('/api/generate-report', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionState: sessionStateForReport, tier: reportTier }),
+                body: JSON.stringify({
+                    sessionState: sessionStateForReport,
+                    tier: reportTier,
+                    firstName,
+                    email,
+                    sessionId,
+                }),
             });
             if (!reportRes.ok) throw new Error(`Report generation failed: ${reportRes.status}`);
             const json = await reportRes.json();
@@ -230,50 +254,41 @@ export default function VoiceInterface() {
             console.error('Report generation error:', err);
         }
 
+        if (!report) {
+            hasSubmittedRef.current = false;
+            setErrorMessage(
+                'We could not generate your report just now. Please try again, or contact us if this keeps happening.',
+            );
+            return;
+        }
+
         if (typeof window !== 'undefined') {
             localStorage.setItem('bop_report_a', JSON.stringify(report));
             localStorage.setItem('bop_lead_data', JSON.stringify(leadData));
             localStorage.setItem('bop_tier', String(tier));
         }
 
-        if (report) {
+        // generate-report already persisted the session server-side, so the
+        // browser no longer makes a separate /api/save-session call (which
+        // was unauthenticated and a 64KB-keepalive risk). For the free-token
+        // Deep Dive, we trigger fulfillment with just the lookup keys so the
+        // request body stays tiny — the server reads the report from the
+        // session store.
+        if (report && tier === null) {
             try {
-                await fetch('/api/save-session', {
+                fetch('/api/fulfill-deep-dive', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        email,
-                        firstName,
-                        sessionId,
-                        transcript: transcriptText,
-                        report,
-                        createdAt: new Date().toISOString(),
-                    }),
+                    body: JSON.stringify({ firstName, email, sessionId, freeToken }),
+                    keepalive: true,
                 });
-            } catch (err) { console.warn('save-session failed:', err); }
-
-            if (tier === null) {
-                // Use keepalive so the request survives the page redirect.
-                // freeToken is required server-side; the endpoint rejects
-                // unauthenticated free fulfillments.
-                try {
-                    fetch('/api/fulfill-deep-dive', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ firstName, email, report, freeToken }),
-                        keepalive: true,
-                    });
-                } catch (err) { console.warn('fulfill-deep-dive trigger failed:', err); }
-            } else if (tier === 1) {
-                try {
-                    await fetch('/api/send-report', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ firstName, email, report, tier }),
-                    });
-                } catch (err) { console.warn('Email send failed:', err); }
-            }
+            } catch (err) { console.warn('fulfill-deep-dive trigger failed:', err); }
         }
+        // For paid tiers (1 and 2), the user is redirected to GHL for payment;
+        // the GHL webhook then emails them (Tier 1: First Light report; Tier 2:
+        // full Deep Dive package via fulfill-deep-dive). We do NOT send the
+        // report email here — that would let a customer get the product
+        // before paying.
 
         if (typeof window !== 'undefined') {
             if (tier === null) {
@@ -284,19 +299,24 @@ export default function VoiceInterface() {
                     : '/report';
                 window.location.href = url;
             } else {
-                const GHL_URLS: Record<number, string> = {
-                    1: process.env.NEXT_PUBLIC_GHL_URL_TIER1 || '/processing?tier=1',
-                    2: process.env.NEXT_PUBLIC_GHL_URL_TIER2 || '/processing?tier=2',
-                    3: process.env.NEXT_PUBLIC_GHL_URL_TIER3 || '/mastery',
-                };
-                const baseUrl = GHL_URLS[tier] || '/report';
-                const finalUrl = tier === 3 
-                  ? baseUrl + '?name=' + encodeURIComponent(capturedFirstName || '') + '&email=' + encodeURIComponent(capturedEmail || '')
-                  : baseUrl;
-                window.location.href = finalUrl;
+                // For paid tiers, the GHL payment URL MUST be set. Falling back
+                // to a local /processing page would let users complete the funnel
+                // without paying. Fail loudly instead.
+                const ghlUrl: string | undefined =
+                    tier === 1 ? process.env.NEXT_PUBLIC_GHL_URL_TIER1 :
+                    tier === 2 ? process.env.NEXT_PUBLIC_GHL_URL_TIER2 :
+                    undefined;
+                if (!ghlUrl) {
+                    hasSubmittedRef.current = false;
+                    setErrorMessage(
+                        'Payment is temporarily unavailable. Your session has been saved; please contact us and we will follow up.',
+                    );
+                    return;
+                }
+                window.location.href = ghlUrl;
             }
         }
-    }, [transcript, sessionId, selectedTier, freeToken, capturedFirstName, capturedEmail]);
+    }, [transcript, sessionId, selectedTier, freeToken]);
 
     // When voice ends, only auto-fulfill the free Deep Dive if the visitor
     // arrived via a valid free-access token (existing client). Everyone else
@@ -330,8 +350,11 @@ export default function VoiceInterface() {
             sessionStorage.removeItem('bop_lead_data');
         }
 
-        // Reset submit lock for a fresh session
+        // Reset submit lock AND sessionId for a fresh session (H3) so a second
+        // session in the same tab never collides with the first one's saved
+        // report or analytics keys.
         hasSubmittedRef.current = false;
+        setSessionId(uuidv4());
 
         setHasStarted(true);
         setErrorMessage(null);
@@ -370,8 +393,13 @@ export default function VoiceInterface() {
         vapi.on('call-end', () => {
             if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current);
             setTranscript(prev => {
-                if (prev.length < 2) {
-                    setErrorMessage('The voice session ended unexpectedly. Please check your microphone permissions and try again.');
+                // A real BOP session has 9 phases and ~50+ exchanges. If we
+                // ended with very little transcript, treat it as a drop and
+                // let the user retry instead of generating a half-baked report.
+                if (prev.length < 12) {
+                    setErrorMessage(
+                        'The voice session ended before we had enough to work with. Please check your microphone and try again.',
+                    );
                     setCallState('idle');
                     setHasStarted(false);
                     return prev;
@@ -409,8 +437,12 @@ export default function VoiceInterface() {
             const isNormalEnd = msg.includes('Meeting has ended') || msg.includes('"msg":"Meeting has ended"') || msg.includes('ejected');
             if (isNormalEnd) {
                 setTranscript(prev => {
-                    if (prev.length < 2) {
-                        setErrorMessage('The voice session could not connect. Please check your microphone permissions and internet connection, then try again.');
+                    // Same H5 threshold as the call-end handler: too short a
+                    // transcript = treat as a drop, not a completion.
+                    if (prev.length < 12) {
+                        setErrorMessage(
+                            'The voice session ended before we had enough to work with. Please check your microphone and connection, then try again.',
+                        );
                         setCallState('idle');
                         setHasStarted(false);
                     } else {
@@ -457,7 +489,8 @@ export default function VoiceInterface() {
             setEarlyError('Please enter both your name and email.');
             return;
         }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(earlyEmail)) {
+        // M5: stricter email check — require a 2+ char TLD and reject obvious junk like a@b.c.
+        if (!/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(earlyEmail.trim())) {
             setEarlyError('Please enter a valid email address.');
             return;
         }

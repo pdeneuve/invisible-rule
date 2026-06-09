@@ -1,8 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { SLIDES_PROMPT } from '@/lib/deep-dive-prompts';
+import { isInternalAuthorized } from '@/lib/api-auth';
 
 export async function POST(req: NextRequest) {
+  if (!isInternalAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (!anthropicKey) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 });

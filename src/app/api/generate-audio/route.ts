@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { PODCAST_SCRIPT_PROMPT } from '@/lib/deep-dive-prompts';
+import { isInternalAuthorized } from '@/lib/api-auth';
 
 // Allow up to 5 minutes — audio generation takes time
 export const maxDuration = 300;
@@ -54,6 +55,9 @@ async function generateSegmentAudio(
 }
 
 export async function POST(req: NextRequest) {
+  if (!isInternalAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const elevenlabsKey = process.env.ELEVENLABS_API_KEY;
   if (!elevenlabsKey) {
     return NextResponse.json({ error: 'ELEVENLABS_API_KEY not configured' }, { status: 500 });

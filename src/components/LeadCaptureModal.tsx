@@ -25,7 +25,7 @@ export default function LeadCaptureModal({ onSubmit, onClose, tier }: Props) {
       setError('Please enter both your name and email.');
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(email.trim())) {
       setError('Please enter a valid email address.');
       return;
     }

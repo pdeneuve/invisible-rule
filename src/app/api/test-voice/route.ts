@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isInternalAuthorized } from '@/lib/api-auth';
 
 export async function POST(req: NextRequest) {
+  if (!isInternalAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: 'ELEVENLABS_API_KEY not configured' }, { status: 500 });

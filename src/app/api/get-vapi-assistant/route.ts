@@ -1,8 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { VAPI_BOP_SYSTEM_PROMPT } from '@/lib/vapi-prompt';
+import { isSameOrigin } from '@/lib/api-auth';
 
-export async function GET() {
-  // If a fixed assistant ID is stored in env, always use it â no creation needed.
+export async function GET(req: NextRequest) {
+  if (!isSameOrigin(req)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  // If a fixed assistant ID is stored in env, always use it - no creation needed.
   // This is the most reliable approach: one assistant, updated via PATCH when needed.
   const fixedId = (process.env.VAPI_ASSISTANT_ID || '').trim();
   if (fixedId) {
@@ -27,7 +32,6 @@ export async function GET() {
   );
 
   try {
-    // Create (or recreate) the assistant via VAPI REST API
     const response = await fetch('https://api.vapi.ai/assistant', {
       method: 'POST',
       headers: {
@@ -48,7 +52,7 @@ export async function GET() {
         },
         voice: {
           provider: '11labs',
-          voiceId: 'ZPJulgnHgp8y0rGE6kJ4', // Pamela's cloned voice
+          voiceId: 'ZPJulgnHgp8y0rGE6kJ4',
         },
         firstMessage: "Welcome. I'm Pamela DeNeuve, and I'm so glad you're here. In the next hour, we're going to find the invisible pattern that's been running your life on autopilot. Before we begin, I want to check in with you. On a scale of 0 to 10, where 0 is completely calm and 10 is the most overwhelmed you've ever felt, where are you emotionally right now?",
         transcriber: {
@@ -56,9 +60,9 @@ export async function GET() {
           model: 'nova-2',
           language: 'en-US',
         },
-        silenceTimeoutSeconds: 300, // 5 minutes â people need time to think
-        maxDurationSeconds: 7200,   // 2 hours
-        endCallFunctionEnabled: false, // never let AI end the call early
+        silenceTimeoutSeconds: 300,
+        maxDurationSeconds: 7200,
+        endCallFunctionEnabled: false,
       }),
     });
 
@@ -72,7 +76,7 @@ export async function GET() {
       );
     }
 
-    console.log('Created VAPI assistant:', data.id, 'â set VAPI_ASSISTANT_ID='+data.id+' in Vercel env to lock this in permanently');
+    console.log('Created VAPI assistant:', data.id, '- set VAPI_ASSISTANT_ID=' + data.id + ' in Vercel env to lock this in permanently');
     return NextResponse.json({ assistantId: data.id });
 
   } catch (error) {

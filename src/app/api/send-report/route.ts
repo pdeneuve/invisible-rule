@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
+import { isInternalAuthorized } from '@/lib/api-auth';
 
 interface SendReportBody {
   firstName?: string;
@@ -12,6 +13,10 @@ interface SendReportBody {
 }
 
 export async function POST(req: NextRequest) {
+  if (!isInternalAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: 'Email service not configured' }, { status: 500 });

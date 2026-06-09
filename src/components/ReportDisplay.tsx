@@ -181,7 +181,7 @@ export default function ReportDisplay({ report, firstName, tier = 2 }: Props) {
               a complete 30-day counter-strategy, and a personalized audio report in Pamela&apos;s voice.
             </p>
             <a
-              href={process.env.NEXT_PUBLIC_GHL_URL_TIER3 || '/'}
+              href={process.env.NEXT_PUBLIC_GHL_URL_TIER2 || '/'}
               className="inline-block px-8 py-3.5 rounded-xl font-semibold text-slate-900 transition-all hover:scale-105 active:scale-95"
               style={{
                 background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
