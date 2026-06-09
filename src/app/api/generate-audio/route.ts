@@ -53,7 +53,12 @@ async function generateSegmentAudio(
   return res.arrayBuffer();
 }
 
+import { verifyInternalSecret } from '@/lib/auth';
+
 export async function POST(req: NextRequest) {
+  if (!verifyInternalSecret(req)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
   const elevenlabsKey = process.env.ELEVENLABS_API_KEY;
   if (!elevenlabsKey) {
     return NextResponse.json({ error: 'ELEVENLABS_API_KEY not configured' }, { status: 500 });
@@ -113,12 +118,12 @@ export async function POST(req: NextRequest) {
     offset += buf.byteLength;
   }
 
-  // ── Step 4: Return the audio as MP3 + the script as a header ───────────
+  // ── Step 4: Return the audio as MP3. Script intentionally not echoed in
+  // response headers to avoid leaking transcript-derived content via logs.
   return new Response(combined, {
     headers: {
       'Content-Type': 'audio/mpeg',
       'Content-Disposition': `attachment; filename="invisible-rule-deep-dive.mp3"`,
-      'X-Script': encodeURIComponent(JSON.stringify(script.map(s => s.text))),
     },
   });
 }

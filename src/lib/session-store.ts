@@ -10,32 +10,67 @@ export interface StoredSession {
   createdAt: string;
 }
 
-function emailKey(email: string): string {
+function normalizeEmail(email: string): string {
+  return email.toLowerCase().trim();
+}
+
+function emailHash(email: string): string {
   const salt = process.env.SESSION_SALT || 'invisible-rule-sessions-v1';
-  const hash = crypto
+  return crypto
     .createHash('sha256')
-    .update(email.toLowerCase().trim() + salt)
+    .update(normalizeEmail(email) + salt)
     .digest('hex');
-  return `sessions/${hash}.json`;
+}
+
+function sessionPrefix(email: string): string {
+  return `sessions/${emailHash(email)}/`;
+}
+
+function sessionKey(email: string, sessionId: string): string {
+  // Path includes the sessionId so two parallel sessions never overwrite each
+  // other, AND so an attacker who somehow guesses the email-hash still can't
+  // construct the URL without also knowing the sessionId (a UUID).
+  return `${sessionPrefix(email)}${sessionId}.json`;
 }
 
 export async function saveSession(data: StoredSession): Promise<void> {
-  const key = emailKey(data.email);
-  await put(key, JSON.stringify(data), {
-    access: 'public',
-    contentType: 'application/json',
-    addRandomSuffix: false,
-    allowOverwrite: true,
-  });
+  if (!data.email || !data.sessionId) {
+    throw new Error('saveSession requires email and sessionId');
+  }
+  const key = sessionKey(data.email, data.sessionId);
+  await put(
+    key,
+    JSON.stringify({ ...data, email: normalizeEmail(data.email) }),
+    {
+      access: 'public',
+      contentType: 'application/json',
+      addRandomSuffix: false,
+      allowOverwrite: true,
+    },
+  );
 }
 
+/**
+ * Returns the most-recently-saved session for the given email, or null.
+ * Lists all sessions under the email-hash prefix, picks the latest by
+ * uploadedAt. This makes paths unenumerable from email alone (every save
+ * lives under a UUID subkey).
+ */
 export async function getSession(email: string): Promise<StoredSession | null> {
   if (!email) return null;
-  const key = emailKey(email);
-  const { blobs } = await list({ prefix: key, limit: 1 });
-  const exact = blobs.find(b => b.pathname === key);
-  if (!exact) return null;
-  const res = await fetch(exact.url);
-  if (!res.ok) return null;
-  return (await res.json()) as StoredSession;
+  try {
+    const { blobs } = await list({ prefix: sessionPrefix(email), limit: 50 });
+    if (blobs.length === 0) return null;
+    blobs.sort((a, b) => {
+      const aTime = a.uploadedAt instanceof Date ? a.uploadedAt.getTime() : Date.parse(String(a.uploadedAt));
+      const bTime = b.uploadedAt instanceof Date ? b.uploadedAt.getTime() : Date.parse(String(b.uploadedAt));
+      return bTime - aTime;
+    });
+    const res = await fetch(blobs[0].url);
+    if (!res.ok) return null;
+    return (await res.json()) as StoredSession;
+  } catch (err) {
+    console.error('getSession error:', err);
+    return null;
+  }
 }

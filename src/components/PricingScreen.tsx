@@ -6,7 +6,11 @@ interface Props {
   onSelectTier: (tier: 1 | 2) => void;
 }
 
-const TIERS = [
+// Tier 3 (Mastery) is not yet built. Set to true once the /mastery flow is
+// production-ready AND a NEXT_PUBLIC_GHL_URL_TIER3 is configured.
+const TIER_3_AVAILABLE = false;
+
+const ALL_TIERS = [
   {
     id: 1 as const,
     name: 'First Light',
@@ -63,10 +67,14 @@ const TIERS = [
   },
 ];
 
+const TIERS = TIER_3_AVAILABLE ? ALL_TIERS : ALL_TIERS.filter(t => t.id !== 3);
+
 export default function PricingScreen({ onSelectTier }: Props) {
   const [selecting, setSelecting] = useState<number | null>(null);
 
-  const handleSelect = (tierId: 1 | 2) => {
+  const handleSelect = (tierId: number) => {
+    if (selecting !== null) return; // anti-double-click guard
+    if (tierId !== 1 && tierId !== 2) return; // tier 3 not yet wired
     setSelecting(tierId);
     onSelectTier(tierId);
   };

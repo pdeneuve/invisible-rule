@@ -66,10 +66,13 @@ export default function ProcessingContent() {
 
   useEffect(() => {
     if (!report && !stale) {
-      const t = setTimeout(() => setTimedOut(true), 15000);
+      // Tier 2 fulfillment runs ~10 minutes (audio + slides + video). Give the
+      // user a realistic wait window before suggesting they go check email.
+      const ms = tier === 2 ? 60_000 : 15_000;
+      const t = setTimeout(() => setTimedOut(true), ms);
       return () => clearTimeout(t);
     }
-  }, [report, stale]);
+  }, [report, stale, tier]);
 
   if (stale) {
     return (

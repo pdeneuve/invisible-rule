@@ -35,7 +35,9 @@ export default function VoiceInterface() {
     const [showPricing, setShowPricing] = useState(false);
     const [showSafety, setShowSafety] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
-    const [sessionId] = useState(() => uuidv4());
+    // sessionId is regenerated for each new call so the same tab can run multiple
+    // sessions back-to-back without state bleed.
+    const [sessionId, setSessionId] = useState(() => uuidv4());
     const [callDuration, setCallDuration] = useState(0);
     const [showTranscript, setShowTranscript] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -59,13 +61,35 @@ export default function VoiceInterface() {
     const hasSubmittedRef = useRef(false);
     // Count of user turns; triggers the mid-session capture modal at threshold
     const userMessageCountRef = useRef(0);
+    // Mute state we restore after the capture modal closes; the mic should pause
+    // while the user is typing into the form so their typing doesn't pollute
+    // the conversation transcript.
+    const mutedForCaptureRef = useRef(false);
     const CAPTURE_AFTER_USER_MESSAGES = 3;
+
+    // Stricter email check than the obviously-permissive default; we accept
+    // a single label TLD (e.g. example.local) so common dev addresses still pass.
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 
     useEffect(() => {
         if (transcriptRef.current) {
             transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
         }
     }, [transcript]);
+
+    // Warn the user before they navigate away during an active voice session.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const callInProgress = callState !== 'idle' && callState !== 'ended';
+        if (!callInProgress) return;
+        const handler = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            // Chrome ignores the returnValue text but requires it to be set
+            e.returnValue = '';
+        };
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, [callState]);
 
     useEffect(() => {
         if (callState === 'active' || callState === 'ai-speaking' || callState === 'user-speaking') {
@@ -206,21 +230,6 @@ export default function VoiceInterface() {
         }
 
         if (report) {
-            try {
-                await fetch('/api/save-session', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        email,
-                        firstName,
-                        sessionId,
-                        transcript: transcriptText,
-                        report,
-                        createdAt: new Date().toISOString(),
-                    }),
-                });
-            } catch (err) { console.warn('save-session failed:', err); }
-
             const params = typeof window !== 'undefined'
                 ? new URLSearchParams(window.location.search)
                 : null;
@@ -230,40 +239,40 @@ export default function VoiceInterface() {
                 pendingParam === '1' || pendingParam === '2' ||
                 testParam === 'firstlight' || testParam === 'deepdive';
 
-            if (tier === null) {
-                // Free Deep Dive: trigger fulfillment immediately.
-                // Use keepalive so the request survives the page redirect.
-                try {
-                    fetch('/api/fulfill-deep-dive', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ firstName, email, report }),
-                        keepalive: true,
-                    });
-                } catch (err) { console.warn('fulfill-deep-dive trigger failed:', err); }
-            } else if (isPending && tier === 1) {
-                // Paid Tier 1, voice session done after payment: email the report now.
-                try {
-                    await fetch('/api/send-report', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ firstName, email, report, tier: 1 }),
-                    });
-                } catch (err) { console.warn('send-report (pending tier 1) failed:', err); }
-            } else if (isPending && tier === 2) {
-                // Paid Tier 2, voice session done after payment: trigger Deep Dive pipeline.
-                try {
-                    fetch('/api/fulfill-deep-dive', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ firstName, email, report }),
-                        keepalive: true,
-                    });
-                } catch (err) { console.warn('fulfill-deep-dive (pending tier 2) failed:', err); }
+            // Mode informs save-session whether it should fulfill server-side or
+            // just store the session and wait for the GHL webhook.
+            let saveMode: 'free' | 'pending' | 'paid';
+            if (isPending) saveMode = 'pending';
+            else if (tier === null) saveMode = 'free';
+            else saveMode = 'paid';
+
+            try {
+                const saveRes = await fetch('/api/save-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email,
+                        firstName,
+                        sessionId,
+                        transcript: transcriptText,
+                        report,
+                        createdAt: new Date().toISOString(),
+                        mode: saveMode,
+                        tier,
+                    }),
+                });
+                if (!saveRes.ok) {
+                    console.error('save-session returned', saveRes.status);
+                    hasSubmittedRef.current = false; // allow retry on error
+                    setErrorMessage('We had trouble saving your session. Please try again.');
+                    return;
+                }
+            } catch (err) {
+                console.error('save-session failed:', err);
+                hasSubmittedRef.current = false;
+                setErrorMessage('We had trouble saving your session. Please try again.');
+                return;
             }
-            // Normal paid tiers (1 and 2) without ?pending: the GHL webhook fulfills
-            // after payment. Do NOT email or generate assets here, or the user gets
-            // the product without paying.
         }
 
         if (typeof window !== 'undefined') {
@@ -280,16 +289,22 @@ export default function VoiceInterface() {
                 // User already paid; show their processing/results page instead of GHL.
                 window.location.href = `/processing?tier=${tier}&sid=${sessionId}`;
             } else {
-                const GHL_URLS: Record<number, string> = {
-                    1: process.env.NEXT_PUBLIC_GHL_URL_TIER1 || `/processing?tier=1&sid=${sessionId}`,
-                    2: process.env.NEXT_PUBLIC_GHL_URL_TIER2 || `/processing?tier=2&sid=${sessionId}`,
-                    3: process.env.NEXT_PUBLIC_GHL_URL_TIER3 || '/mastery',
-                };
-                const baseUrl = GHL_URLS[tier] || '/report';
-                const finalUrl = tier === 3
-                  ? baseUrl + '?name=' + encodeURIComponent(capturedFirstName || '') + '&email=' + encodeURIComponent(capturedEmail || '')
-                  : baseUrl;
-                window.location.href = finalUrl;
+                // Normal paid path: redirect to GHL checkout. If the env var is
+                // missing we refuse to send the user to /processing, since that
+                // would deliver the product without payment.
+                const ghlUrl =
+                    tier === 1 ? process.env.NEXT_PUBLIC_GHL_URL_TIER1 :
+                    tier === 2 ? process.env.NEXT_PUBLIC_GHL_URL_TIER2 :
+                    process.env.NEXT_PUBLIC_GHL_URL_TIER3;
+                if (!ghlUrl) {
+                    console.error(`NEXT_PUBLIC_GHL_URL_TIER${tier} missing — refusing fallback`);
+                    setErrorMessage(
+                        'Checkout is temporarily unavailable. Your session has been saved; please try again shortly.',
+                    );
+                    hasSubmittedRef.current = false;
+                    return;
+                }
+                window.location.href = ghlUrl;
             }
         }
     }, [transcript, sessionId, capturedFirstName, capturedEmail]);
@@ -373,9 +388,14 @@ export default function VoiceInterface() {
             sessionStorage.removeItem('bop_lead_data');
         }
 
-        // Reset submit lock, captured contact, and user-message counter for a fresh session
+        // Reset submit lock, captured contact, user-message counter, and the
+        // sessionId for a truly fresh session.
         hasSubmittedRef.current = false;
         userMessageCountRef.current = 0;
+        mutedForCaptureRef.current = false;
+        setSessionId(uuidv4());
+        setTranscript([]);
+        setCurrentPhaseIndex(0);
         setCapturedFirstName('');
         setCapturedEmail('');
         setShowCaptureModal(false);
@@ -450,12 +470,18 @@ export default function VoiceInterface() {
                     setTimeout(() => setCallState('active'), 500);
                     userMessageCountRef.current += 1;
                     // Once the user is a few turns in, surface the capture modal
-                    // so we can email them their report. Voice continues in the
-                    // background — the modal is a calm overlay, not a hard stop.
+                    // so we can email them their report. We mute the mic while
+                    // the modal is open so the user typing into the form (or
+                    // talking to themselves) doesn't pollute the transcript.
                     if (
                         userMessageCountRef.current === CAPTURE_AFTER_USER_MESSAGES &&
                         !capturedEmail
                     ) {
+                        if (vapiRef.current && !isMuted) {
+                            try { vapiRef.current.setMuted(true); } catch { /* ignore */ }
+                            mutedForCaptureRef.current = true;
+                            setIsMuted(true);
+                        }
                         setShowCaptureModal(true);
                     }
                 }
@@ -510,23 +536,30 @@ export default function VoiceInterface() {
 
     const handleEarlyCaptureSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!earlyName.trim() || !earlyEmail.trim()) {
+        const fn = earlyName.trim();
+        const em = earlyEmail.trim();
+        if (!fn || !em) {
             setEarlyError('Please enter both your name and email.');
             return;
         }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(earlyEmail)) {
+        if (!EMAIL_RE.test(em)) {
             setEarlyError('Please enter a valid email address.');
             return;
         }
         setEarlySubmitting(true);
 
-        const fn = earlyName.trim();
-        const em = earlyEmail.trim();
-
         setCapturedFirstName(fn);
         setCapturedEmail(em);
         setShowCaptureModal(false);
 
+        // Restore the mic if we muted it to show the modal mid-call.
+        if (mutedForCaptureRef.current && vapiRef.current && callState !== 'ended') {
+            try { vapiRef.current.setMuted(false); } catch { /* ignore */ }
+            setIsMuted(false);
+        }
+        mutedForCaptureRef.current = false;
+
+        const callInProgress = callState !== 'ended' && callState !== 'idle';
         try {
             await fetch('/api/submit-lead', {
                 method: 'POST',
@@ -537,7 +570,7 @@ export default function VoiceInterface() {
                     sessionId,
                     sessionTranscript: '',
                     completedAt: new Date().toISOString(),
-                    tags: ['abandoned-visitor'],
+                    tags: [callInProgress ? 'in-session-captured' : 'session-completed'],
                 }),
             });
         } catch (err) {
@@ -549,7 +582,7 @@ export default function VoiceInterface() {
         // Voice is already running (mid-session) or already ended (post-call) —
         // do NOT call startCall here; the auto-trigger useEffect will detect
         // the now-set capturedEmail and run handleLeadSubmit if appropriate.
-    }, [earlyName, earlyEmail, sessionId]);
+    }, [earlyName, earlyEmail, sessionId, callState]);
 
     const handleTryAgain = useCallback(() => {
         setConnectionTimedOut(false);

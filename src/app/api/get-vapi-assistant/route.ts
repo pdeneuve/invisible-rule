@@ -1,7 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { VAPI_BOP_SYSTEM_PROMPT } from '@/lib/vapi-prompt';
+import { rateLimit, getClientIp } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!rateLimit(`get-vapi-assistant:${getClientIp(req)}`, 10)) {
+    return NextResponse.json({ error: 'rate limited' }, { status: 429 });
+  }
   // If a fixed assistant ID is stored in env, always use it â no creation needed.
   // This is the most reliable approach: one assistant, updated via PATCH when needed.
   const fixedId = (process.env.VAPI_ASSISTANT_ID || '').trim();

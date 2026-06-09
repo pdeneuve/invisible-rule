@@ -13,6 +13,16 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
 
   return (
     <div className="min-h-screen bg-slate-950">
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body { background: white !important; color: black !important; }
+          .min-h-screen { background: white !important; }
+          .text-white, .text-slate-300, .text-slate-400 { color: black !important; }
+          .bg-slate-950 { background: white !important; }
+          button { display: none !important; }
+          a { color: black !important; text-decoration: underline; }
+        }
+      ` }} />
       <div className="max-w-2xl mx-auto px-4 py-12">
 
         <div className="text-center mb-12">

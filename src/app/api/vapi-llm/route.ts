@@ -1,12 +1,33 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { VAPI_BOP_SYSTEM_PROMPT } from '@/lib/vapi-prompt';
+import { rateLimit, getClientIp } from '@/lib/auth';
 
-// VAPI Custom LLM endpoint â receives messages from VAPI, returns OpenAI-compatible SSE stream
-// This lets VAPI handle all voice (STT + TTS) while we handle the AI using our Anthropic key
+// VAPI Custom LLM endpoint — receives messages from VAPI, returns OpenAI-compatible SSE stream.
+// This lets VAPI handle voice (STT + TTS) while we handle the AI using our Anthropic key.
+
+function verifyVapi(req: NextRequest): boolean {
+  // VAPI sends a configurable Authorization header on custom-LLM calls. We require it
+  // match VAPI_SHARED_SECRET so this endpoint isn't a free Claude proxy.
+  const expected = process.env.VAPI_SHARED_SECRET;
+  if (!expected) return false;
+  const auth = req.headers.get('authorization') || '';
+  const provided = auth.startsWith('Bearer ') ? auth.slice(7) : auth;
+  return provided === expected;
+}
 
 export async function POST(req: NextRequest) {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+  if (!verifyVapi(req)) {
+    // Soft rate limit on unauthorized hits so this can't be enumerated for free
+    rateLimit(`vapi-llm-unauth:${getClientIp(req)}`, 3);
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: 'AI not configured' }, { status: 500 });
+  }
+  const client = new Anthropic({ apiKey });
 
   const body = await req.json();
   const { messages = [] } = body;
@@ -18,7 +39,7 @@ export async function POST(req: NextRequest) {
 
   // Filter to only user/assistant messages for Anthropic
   const conversationMessages = messages.filter(
-    (m: { role: string }) => m.role === 'user' || m.role === 'assistant'
+    (m: { role: string }) => m.role === 'user' || m.role === 'assistant',
   );
 
   const encoder = new TextEncoder();
@@ -43,7 +64,6 @@ export async function POST(req: NextRequest) {
             chunk.type === 'content_block_delta' &&
             chunk.delta.type === 'text_delta'
           ) {
-            // OpenAI-compatible SSE chunk format
             const sseData = {
               id: `chatcmpl-${Date.now()}`,
               object: 'chat.completion.chunk',
@@ -62,7 +82,6 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Send final chunk
         const finalData = {
           id: `chatcmpl-${Date.now()}`,
           object: 'chat.completion.chunk',
@@ -85,17 +104,6 @@ export async function POST(req: NextRequest) {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-    },
-  });
-}
-
-export async function OPTIONS() {
-  return new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });
 }
