@@ -1,4 +1,4 @@
-import { put, list, del } from '@vercel/blob';
+import { put, list, del, head } from '@vercel/blob';
 import crypto from 'crypto';
 
 export interface PendingPayment {
@@ -93,10 +93,16 @@ export async function isOrderProcessed(orderId: string): Promise<boolean> {
   if (!orderId) return false;
   const key = processedKey(orderId);
   try {
-    const { blobs } = await list({ prefix: key, limit: 1 });
-    return blobs.some(b => b.pathname === key);
-  } catch {
-    return false;
+    const info = await head(key, { token: process.env.BLOB_READ_WRITE_TOKEN });
+    return !!info;
+  } catch (err) {
+    // Same fail-closed pattern as fulfilled-store. BlobNotFoundError → not
+    // yet processed; anything else → treat as processed to avoid duplicate
+    // GHL-initiated fulfillment on a transient blob error.
+    const name = (err as { name?: string })?.name || '';
+    if (name === 'BlobNotFoundError') return false;
+    console.error('isOrderProcessed head() failed (failing closed):', err);
+    return true;
   }
 }
 

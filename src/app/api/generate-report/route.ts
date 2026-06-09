@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { REPORT_GENERATION_PROMPT, FIRST_LIGHT_PROMPT } from '@/lib/bop-system-prompt';
 import { SessionState } from '@/lib/types';
-import { verifyOriginOrSameSite, rateLimit, getClientIp } from '@/lib/auth';
+import { verifyBrowserOrigin, rateLimit, getClientIp } from '@/lib/auth';
 
 export const maxDuration = 300; // 5 minutes - needed for Australia + high-latency users
 
@@ -15,7 +15,7 @@ function safeJsonParse<T = unknown>(raw: string): T | null {
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifyOriginOrSameSite(req)) {
+  if (!verifyBrowserOrigin(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
   if (!rateLimit(`generate-report:${getClientIp(req)}`, 6)) {

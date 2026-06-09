@@ -205,9 +205,13 @@ export async function POST(req: NextRequest) {
   if (!body.email || !body.report) {
     return NextResponse.json({ error: 'Missing email or report' }, { status: 400 });
   }
+  if (!body.sessionId) {
+    // sessionId is required so the idempotency check has something to key on.
+    return NextResponse.json({ error: 'Missing sessionId' }, { status: 400 });
+  }
 
   // Idempotency: same (email, tier 2, sessionId) is only fulfilled once.
-  if (body.sessionId && (await isAlreadyFulfilled(body.email, 2, body.sessionId))) {
+  if (await isAlreadyFulfilled(body.email, 2, body.sessionId)) {
     console.log(`fulfill-deep-dive: already fulfilled for ${body.email} session ${body.sessionId}`);
     return NextResponse.json({ success: true, idempotent: true });
   }

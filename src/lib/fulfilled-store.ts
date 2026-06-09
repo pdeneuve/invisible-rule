@@ -33,9 +33,16 @@ export async function isAlreadyFulfilled(
   try {
     const info = await head(key, { token: process.env.BLOB_READ_WRITE_TOKEN });
     return !!info;
-  } catch {
-    // head() throws when the blob does not exist.
-    return false;
+  } catch (err) {
+    // head() throws BlobNotFoundError when the marker is genuinely absent —
+    // that's our happy "not yet fulfilled" path. Any OTHER error (network
+    // hiccup, transient 5xx, auth) we treat as "fulfilled" so a retry can't
+    // accidentally cause duplicate paid work; the caller may briefly stall
+    // but we won't double-bill ElevenLabs / Creatomate.
+    const name = (err as { name?: string })?.name || '';
+    if (name === 'BlobNotFoundError') return false;
+    console.error('isAlreadyFulfilled head() failed (failing closed):', err);
+    return true;
   }
 }
 

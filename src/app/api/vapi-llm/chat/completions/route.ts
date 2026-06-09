@@ -1,34 +1,41 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { VAPI_BOP_SYSTEM_PROMPT } from '@/lib/vapi-prompt';
+import { rateLimit, getClientIp, verifyVapiSecret } from '@/lib/auth';
 
-// VAPI Custom LLM endpoint
-// VAPI uses this as a base URL and appends /chat/completions â so this file lives at
-// /api/vapi-llm/chat/completions which VAPI reaches via baseURL = /api/vapi-llm
+// VAPI custom-LLM endpoint. VAPI is configured with baseURL = /api/vapi-llm
+// and appends /chat/completions; this file is what actually serves live calls.
 
 export async function POST(req: NextRequest) {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+  if (!verifyVapiSecret(req)) {
+    // Light rate limit on unauthorized hits so this can't be enumerated as a
+    // free Claude proxy.
+    rateLimit(`vapi-llm-cc-unauth:${getClientIp(req)}`, 3);
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: 'AI not configured' }, { status: 500 });
+  }
+  const client = new Anthropic({ apiKey });
 
   const body = await req.json();
   const { messages = [], stream: shouldStream = true } = body;
 
-  // Extract system message if present, otherwise use our BOP prompt
   const systemMessage = messages.find((m: { role: string }) => m.role === 'system');
   const systemPrompt = systemMessage?.content ||
     VAPI_BOP_SYSTEM_PROMPT.replace('{SESSION_STATE}', JSON.stringify({ phase: 'ORIENTATION' }));
 
-  // Filter to only user/assistant messages for Anthropic
   const conversationMessages = messages.filter(
-    (m: { role: string }) => m.role === 'user' || m.role === 'assistant'
+    (m: { role: string }) => m.role === 'user' || m.role === 'assistant',
   );
 
-  // Ensure there's at least one message
   if (conversationMessages.length === 0) {
     conversationMessages.push({ role: 'user', content: 'Hello' });
   }
 
   if (!shouldStream) {
-    // Non-streaming response
     const response = await client.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 300,
@@ -39,7 +46,7 @@ export async function POST(req: NextRequest) {
       })),
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
     return Response.json({
       id: `chatcmpl-${Date.now()}`,
       object: 'chat.completion',
@@ -53,7 +60,6 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Streaming response
   const encoder = new TextEncoder();
 
   const readableStream = new ReadableStream({
@@ -92,7 +98,6 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Final chunk
         const finalData = {
           id: `chatcmpl-${Date.now()}`,
           object: 'chat.completion.chunk',
@@ -115,17 +120,6 @@ export async function POST(req: NextRequest) {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-    },
-  });
-}
-
-export async function OPTIONS() {
-  return new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });
 }

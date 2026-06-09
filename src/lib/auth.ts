@@ -88,9 +88,6 @@ export function verifyBrowserOrigin(req: NextRequest): boolean {
   return false;
 }
 
-/** Legacy alias retained so existing call sites keep working. */
-export const verifyOriginOrSameSite = verifyBrowserOrigin;
-
 /**
  * Verifies the Authorization header VAPI sends on custom-LLM and webhook calls.
  * VAPI is configured to send Bearer VAPI_SHARED_SECRET.

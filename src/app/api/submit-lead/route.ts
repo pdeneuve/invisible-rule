@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LeadData } from '@/lib/types';
 import {
-  verifyOriginOrSameSite,
+  verifyBrowserOrigin,
   rateLimit,
   getClientIp,
 } from '@/lib/auth';
@@ -13,7 +13,7 @@ interface SubmitLeadBody extends Partial<LeadData> {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 
 export async function POST(req: NextRequest) {
-  if (!verifyOriginOrSameSite(req)) {
+  if (!verifyBrowserOrigin(req)) {
     return NextResponse.json({ success: false, error: 'unauthorized' }, { status: 401 });
   }
   if (!rateLimit(`submit-lead:${getClientIp(req)}`, 8)) {
