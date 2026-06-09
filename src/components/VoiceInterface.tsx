@@ -564,6 +564,7 @@ export default function VoiceInterface() {
         // Restore the mic if we muted it to show the modal mid-call.
         if (mutedForCaptureRef.current && vapiRef.current && callState !== 'ended') {
             try { vapiRef.current.setMuted(false); } catch { /* ignore */ }
+            isMutedRef.current = false;
             setIsMuted(false);
         }
         mutedForCaptureRef.current = false;

@@ -89,6 +89,10 @@ export async function deletePending(email: string): Promise<void> {
   }
 }
 
+/**
+ * BlobNotFoundError → returns false. Other errors rethrow so the GHL webhook
+ * can return 5xx and let GHL retry, rather than silently dropping the order.
+ */
 export async function isOrderProcessed(orderId: string): Promise<boolean> {
   if (!orderId) return false;
   const key = processedKey(orderId);
@@ -96,13 +100,10 @@ export async function isOrderProcessed(orderId: string): Promise<boolean> {
     const info = await head(key, { token: process.env.BLOB_READ_WRITE_TOKEN });
     return !!info;
   } catch (err) {
-    // Same fail-closed pattern as fulfilled-store. BlobNotFoundError → not
-    // yet processed; anything else → treat as processed to avoid duplicate
-    // GHL-initiated fulfillment on a transient blob error.
     const name = (err as { name?: string })?.name || '';
     if (name === 'BlobNotFoundError') return false;
-    console.error('isOrderProcessed head() failed (failing closed):', err);
-    return true;
+    console.error('isOrderProcessed head() failed:', err);
+    throw err;
   }
 }
 

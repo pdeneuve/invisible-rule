@@ -19,9 +19,13 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { put } from '@vercel/blob';
 import crypto from 'crypto';
 import { verifyInternalSecret, internalAuthHeader } from '@/lib/auth';
-import { isAlreadyFulfilled, markFulfilled } from '@/lib/fulfilled-store';
+import { isAlreadyFulfilled, markFulfilled, clearFulfilled } from '@/lib/fulfilled-store';
 
-export const maxDuration = 300;
+// 800s is the Pro-tier ceiling on Vercel Functions; the Deep Dive pipeline
+// (sequential ElevenLabs TTS for 12 segments + slides + email) can run past
+// 5 minutes on long reports. The video render submission itself is fire-and-
+// forget so we don't wait for the render to finish.
+export const maxDuration = 800;
 
 interface FulfillRequestBody {
   firstName: string;
@@ -176,17 +180,19 @@ async function runFulfillment(body: FulfillRequestBody): Promise<void> {
       videoStatusUrl,
       slidesUrl,
     );
-    if (emailed && sessionId) {
-      try {
-        await markFulfilled(email, 2, sessionId);
-      } catch (err) {
-        console.error('markFulfilled error (email already sent):', err);
-      }
-    } else if (!emailed) {
-      console.error('Deep Dive: email send failed; not marking fulfilled so retry is possible');
+    if (!emailed && sessionId) {
+      // We claimed the marker before this work to close the duplicate-trigger
+      // race; the email failed, so release the claim and let the next retry
+      // attempt re-fulfill.
+      console.error('Deep Dive: email send failed; releasing fulfillment claim');
+      await clearFulfilled(email, 2, sessionId);
     }
   } catch (err) {
-    console.error('runFulfillment error:', err);
+    console.error('runFulfillment error; releasing fulfillment claim:', err);
+    if (sessionId) {
+      try { await clearFulfilled(email, 2, sessionId); }
+      catch (rollbackErr) { console.error('clearFulfilled rollback error:', rollbackErr); }
+    }
   }
 }
 
@@ -206,19 +212,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing email or report' }, { status: 400 });
   }
   if (!body.sessionId) {
-    // sessionId is required so the idempotency check has something to key on.
     return NextResponse.json({ error: 'Missing sessionId' }, { status: 400 });
   }
 
   // Idempotency: same (email, tier 2, sessionId) is only fulfilled once.
-  if (await isAlreadyFulfilled(body.email, 2, body.sessionId)) {
-    console.log(`fulfill-deep-dive: already fulfilled for ${body.email} session ${body.sessionId}`);
-    return NextResponse.json({ success: true, idempotent: true });
+  try {
+    if (await isAlreadyFulfilled(body.email, 2, body.sessionId)) {
+      console.log(`fulfill-deep-dive: already fulfilled for ${body.email} session ${body.sessionId}`);
+      return NextResponse.json({ success: true, idempotent: true });
+    }
+  } catch (err) {
+    // Blob hiccup — 5xx so the caller can retry instead of us either
+    // refusing forever or double-billing by guessing.
+    console.error('fulfill-deep-dive: isAlreadyFulfilled failed:', err);
+    return NextResponse.json({ error: 'idempotency-check-failed' }, { status: 503 });
   }
 
-  // Respond to the caller immediately; do the 10-minute work in a continuation
-  // that Vercel keeps alive after the response. This is the only safe pattern
-  // for "fire and let it cook" on serverless.
+  // Claim the marker BEFORE scheduling the heavy work. This closes the race
+  // where two concurrent triggers (webhook retry + save-session pending) both
+  // pass the head() check above and both start running the pipeline.
+  try {
+    await markFulfilled(body.email, 2, body.sessionId);
+  } catch (err) {
+    console.error('fulfill-deep-dive: markFulfilled (claim) failed:', err);
+    return NextResponse.json({ error: 'claim-failed' }, { status: 503 });
+  }
+
+  // Respond fast; do the work in a continuation Vercel keeps alive after the
+  // response. The claim is rolled back inside runFulfillment if the email
+  // ultimately fails so a manual or upstream retry can re-attempt.
   after(() => runFulfillment(body));
 
   return NextResponse.json({ success: true, queued: true });

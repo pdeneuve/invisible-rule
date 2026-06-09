@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyBrowserOrigin, rateLimit, getClientIp } from '@/lib/auth';
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ renderId: string }> }
 ) {
+  if (!verifyBrowserOrigin(req)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+  if (!rateLimit(`video-status:${getClientIp(req)}`, 60)) {
+    return NextResponse.json({ error: 'rate limited' }, { status: 429 });
+  }
   const creatomateKey = process.env.CREATOMATE_API_KEY;
   if (!creatomateKey) return NextResponse.json({ error: 'CREATOMATE_API_KEY not configured' }, { status: 500 });
 

@@ -235,12 +235,24 @@ export async function POST(req: NextRequest) {
   const orderId = (payload.orderId || payload.order_id || '').trim();
 
   // Idempotency: if GHL retries the same order, skip duplicate fulfillment.
-  if (orderId && (await isOrderProcessed(orderId))) {
-    console.log(`GHL webhook: order ${orderId} already processed, skipping`);
-    return NextResponse.json(
-      { received: true, tier, fulfilled: true, idempotent: true },
-      { status: 200 },
-    );
+  if (orderId) {
+    try {
+      if (await isOrderProcessed(orderId)) {
+        console.log(`GHL webhook: order ${orderId} already processed, skipping`);
+        return NextResponse.json(
+          { received: true, tier, fulfilled: true, idempotent: true },
+          { status: 200 },
+        );
+      }
+    } catch (err) {
+      // Blob store is having a moment. 5xx so GHL retries instead of us
+      // silently claiming the order is "done".
+      console.error('isOrderProcessed failed:', err);
+      return NextResponse.json(
+        { error: 'idempotency-check-failed' },
+        { status: 503 },
+      );
+    }
   }
 
   // Config sanity. 5xx so GHL retries when ops fixes it.

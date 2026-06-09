@@ -39,24 +39,28 @@ function appUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL || 'https://invisible-rule.vercel.app';
 }
 
+type TriggerResult = 'ok' | 'transient' | 'failed';
+
 async function triggerSendReport(
   firstName: string,
   email: string,
   report: Record<string, string>,
   sessionId: string,
-): Promise<boolean> {
+): Promise<TriggerResult> {
   const auth = internalAuthHeader();
-  if (!auth) return false;
+  if (!auth) return 'failed';
   try {
     const res = await fetch(`${appUrl()}/api/send-report`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
       body: JSON.stringify({ firstName, email, report, tier: 1, sessionId }),
     });
-    return res.ok;
+    if (res.ok) return 'ok';
+    if (res.status >= 500) return 'transient';
+    return 'failed';
   } catch (err) {
     console.error('triggerSendReport error:', err);
-    return false;
+    return 'transient';
   }
 }
 
@@ -65,21 +69,21 @@ async function triggerFulfillDeepDive(
   email: string,
   report: Record<string, string>,
   sessionId: string,
-): Promise<boolean> {
+): Promise<TriggerResult> {
   const auth = internalAuthHeader();
-  if (!auth) return false;
+  if (!auth) return 'failed';
   try {
-    // fulfill-deep-dive returns fast (queues work via after()), so we can
-    // safely await without blocking the user.
     const res = await fetch(`${appUrl()}/api/fulfill-deep-dive`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
       body: JSON.stringify({ firstName, email, report, sessionId }),
     });
-    return res.ok;
+    if (res.ok) return 'ok';
+    if (res.status >= 500) return 'transient';
+    return 'failed';
   } catch (err) {
     console.error('triggerFulfillDeepDive error:', err);
-    return false;
+    return 'transient';
   }
 }
 
@@ -161,23 +165,37 @@ export async function POST(req: NextRequest) {
     }
 
     const paidTier = pending.tier;
-    const ok =
+    const result =
       paidTier === 1
         ? await triggerSendReport(session.firstName, session.email, session.report, session.sessionId)
         : await triggerFulfillDeepDive(session.firstName, session.email, session.report, session.sessionId);
 
-    if (ok) {
+    if (result === 'ok') {
       await deletePending(session.email);
+      return NextResponse.json({ success: true, fulfilled: true, tier: paidTier });
     }
-    return NextResponse.json({ success: true, fulfilled: ok, tier: paidTier });
+    if (result === 'transient') {
+      // Don't delete the pending record; let the user retry.
+      return NextResponse.json(
+        { error: 'fulfillment-temporarily-unavailable' },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json({ success: true, fulfilled: false, tier: paidTier });
   }
 
   // mode === 'free'
-  const ok = await triggerFulfillDeepDive(
+  const result = await triggerFulfillDeepDive(
     session.firstName,
     session.email,
     session.report,
     session.sessionId,
   );
-  return NextResponse.json({ success: true, fulfilled: ok, mode: 'free' });
+  if (result === 'transient') {
+    return NextResponse.json(
+      { error: 'fulfillment-temporarily-unavailable' },
+      { status: 503 },
+    );
+  }
+  return NextResponse.json({ success: true, fulfilled: result === 'ok', mode: 'free' });
 }

@@ -1,4 +1,4 @@
-import { put, head } from '@vercel/blob';
+import { put, head, del } from '@vercel/blob';
 import crypto from 'crypto';
 
 /**
@@ -23,6 +23,13 @@ function fulfillmentKey(email: string, tier: 1 | 2, sessionId: string): string {
   return `fulfilled/${emailHash(email)}-t${tier}-${sessionId}.json`;
 }
 
+/**
+ * Returns true only when the fulfillment marker is confirmed present.
+ * BlobNotFoundError → returns false (the legitimate "not yet" path).
+ * Any other head() error is RETHROWN so the caller can decide whether to
+ * 5xx (and let the upstream retry) instead of silently claiming the work
+ * is done. Logged before rethrowing.
+ */
 export async function isAlreadyFulfilled(
   email: string,
   tier: 1 | 2,
@@ -34,15 +41,10 @@ export async function isAlreadyFulfilled(
     const info = await head(key, { token: process.env.BLOB_READ_WRITE_TOKEN });
     return !!info;
   } catch (err) {
-    // head() throws BlobNotFoundError when the marker is genuinely absent —
-    // that's our happy "not yet fulfilled" path. Any OTHER error (network
-    // hiccup, transient 5xx, auth) we treat as "fulfilled" so a retry can't
-    // accidentally cause duplicate paid work; the caller may briefly stall
-    // but we won't double-bill ElevenLabs / Creatomate.
     const name = (err as { name?: string })?.name || '';
     if (name === 'BlobNotFoundError') return false;
-    console.error('isAlreadyFulfilled head() failed (failing closed):', err);
-    return true;
+    console.error('isAlreadyFulfilled head() failed:', err);
+    throw err;
   }
 }
 
@@ -63,4 +65,26 @@ export async function markFulfilled(
       allowOverwrite: true,
     },
   );
+}
+
+/**
+ * Roll back the fulfillment marker. Used when the heavy work that ran AFTER
+ * markFulfilled threw, so a manual or upstream retry can re-attempt.
+ */
+export async function clearFulfilled(
+  email: string,
+  tier: 1 | 2,
+  sessionId: string,
+): Promise<void> {
+  if (!email || !sessionId) return;
+  const key = fulfillmentKey(email, tier, sessionId);
+  try {
+    const info = await head(key, { token: process.env.BLOB_READ_WRITE_TOKEN });
+    if (info?.url) await del(info.url);
+  } catch (err) {
+    const name = (err as { name?: string })?.name || '';
+    if (name !== 'BlobNotFoundError') {
+      console.error('clearFulfilled error:', err);
+    }
+  }
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { verifyInternalSecret } from '@/lib/auth';
 import { escapeHtml, safeUrl } from '@/lib/safe-html';
-import { isAlreadyFulfilled, markFulfilled } from '@/lib/fulfilled-store';
+import { isAlreadyFulfilled, markFulfilled, clearFulfilled } from '@/lib/fulfilled-store';
 
 interface SendReportBody {
   firstName?: string;
@@ -35,9 +35,25 @@ export async function POST(req: NextRequest) {
 
   // Idempotency: same (email, tier, sessionId) sends at most one email.
   const effectiveTier: 1 | 2 = tier === 2 ? 2 : 1;
-  if (sessionId && (await isAlreadyFulfilled(email, effectiveTier, sessionId))) {
-    console.log(`send-report: already fulfilled for ${email} tier ${effectiveTier} session ${sessionId}`);
-    return NextResponse.json({ success: true, idempotent: true });
+  let claimed = false;
+  if (sessionId) {
+    try {
+      if (await isAlreadyFulfilled(email, effectiveTier, sessionId)) {
+        console.log(`send-report: already fulfilled for ${email} tier ${effectiveTier} session ${sessionId}`);
+        return NextResponse.json({ success: true, idempotent: true });
+      }
+    } catch (err) {
+      console.error('send-report: isAlreadyFulfilled failed:', err);
+      return NextResponse.json({ error: 'idempotency-check-failed' }, { status: 503 });
+    }
+    // Claim before sending so concurrent triggers don't both send.
+    try {
+      await markFulfilled(email, effectiveTier, sessionId);
+      claimed = true;
+    } catch (err) {
+      console.error('send-report: markFulfilled (claim) failed:', err);
+      return NextResponse.json({ error: 'claim-failed' }, { status: 503 });
+    }
   }
 
   const safeName = escapeHtml(firstName || 'Friend');
@@ -130,14 +146,14 @@ export async function POST(req: NextRequest) {
         subject: `${subjectName}, your Invisible Rule is here`,
         html,
       });
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      if (sessionId) {
-        try { await markFulfilled(email, 1, sessionId); }
-        catch (err) { console.error('markFulfilled error (email already sent):', err); }
+      if (error) {
+        if (claimed && sessionId) await clearFulfilled(email, 1, sessionId);
+        return NextResponse.json({ error: error.message }, { status: 500 });
       }
       return NextResponse.json({ success: true, id: data?.id });
     } catch (err) {
       console.error('Send First Light email error:', err);
+      if (claimed && sessionId) await clearFulfilled(email, 1, sessionId);
       return NextResponse.json({ error: 'Failed to send email' }, { status: 500 });
     }
   }
@@ -202,14 +218,14 @@ export async function POST(req: NextRequest) {
       subject: `${subjectName}, your Deep Dive is ready`,
       html,
     });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (sessionId) {
-      try { await markFulfilled(email, 2, sessionId); }
-      catch (err) { console.error('markFulfilled error (email already sent):', err); }
+    if (error) {
+      if (claimed && sessionId) await clearFulfilled(email, 2, sessionId);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
     return NextResponse.json({ success: true, id: data?.id });
   } catch (err) {
     console.error('Send Deep Dive email error:', err);
+    if (claimed && sessionId) await clearFulfilled(email, 2, sessionId);
     return NextResponse.json({ error: 'Failed to send email' }, { status: 500 });
   }
 }
