@@ -44,7 +44,6 @@ export default function VoiceInterface() {
     const [connectionTimedOut, setConnectionTimedOut] = useState(false);
     const [isProcessingReport, setIsProcessingReport] = useState(false);
 
-    // Email captured during voice session at a natural prompt point
     const [emailCaptured, setEmailCaptured] = useState(false);
     const [capturedFirstName, setCapturedFirstName] = useState('');
     const [capturedEmail, setCapturedEmail] = useState('');
@@ -54,7 +53,6 @@ export default function VoiceInterface() {
     const [earlyError, setEarlyError] = useState('');
     const [earlySubmitting, setEarlySubmitting] = useState(false);
 
-    // Free-access token from URL ?token=... (existing-client free Deep Dive).
     const [freeToken, setFreeToken] = useState('');
     const [freeTokenValid, setFreeTokenValid] = useState(false);
 
@@ -316,8 +314,6 @@ export default function VoiceInterface() {
         if (hasSubmittedRef.current) return;
         if (showPricing) return;
 
-        // If we never captured the name/email mid-conversation, open that
-        // modal now so the user isn't stranded on a blank screen.
         if (!emailCaptured || !capturedEmail || !capturedFirstName) {
             setShowEarlyCapture(true);
             return;
@@ -326,7 +322,6 @@ export default function VoiceInterface() {
         if (freeTokenValid) {
             handleLeadSubmit(capturedFirstName, capturedEmail);
         } else {
-            // Default flow: show First Light ($7) + Deep Dive ($97) pricing.
             setShowPricing(true);
         }
     }, [callState, emailCaptured, capturedEmail, capturedFirstName, freeTokenValid, handleLeadSubmit, showPricing]);
@@ -504,6 +499,27 @@ export default function VoiceInterface() {
             });
         } catch (err) {
             console.warn('mid-session submit-lead failed:', err);
+        }
+
+        // Nudge VAPI to continue the conversation. Two messages: a system
+        // hint with the captured data, and a brief assistant ack so the
+        // user hears confirmation and the AI moves on.
+        if (vapiRef.current) {
+            try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const v = vapiRef.current as any;
+                if (typeof v.send === 'function') {
+                    v.send({
+                        type: 'add-message',
+                        message: {
+                            role: 'system',
+                            content: `The user just entered their first name "${fn}" and email "${em}". Briefly thank them by first name, confirm the report will be sent to that address after the session, and continue with the next question.`,
+                        },
+                    });
+                }
+            } catch (err) {
+                console.warn('Could not nudge VAPI after capture:', err);
+            }
         }
 
         setShowEarlyCapture(false);
@@ -873,7 +889,7 @@ export default function VoiceInterface() {
                                 disabled={earlySubmitting}
                                 className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-900 font-semibold py-4 rounded-xl transition-all duration-200 hover:scale-105 disabled:hover:scale-100"
                             >
-                                {earlySubmitting ? 'Saving...' : 'Save my spot'}
+                                {earlySubmitting ? 'Sending...' : 'Send my report'}
                             </button>
                             <p className="text-center text-slate-500 text-xs">
                                 No spam. No selling your data.
