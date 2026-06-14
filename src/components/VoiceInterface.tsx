@@ -141,15 +141,20 @@ export default function VoiceInterface() {
     const checkForCapturePrompt = useCallback((text: string) => {
         const lower = text.toLowerCase();
         const promptPatterns = [
-            /enter your (?:first )?name and email/i,
-            /your name and (?:your )?email/i,
-            /name and email address/i,
-            /to send you (?:your|the) (?:report|deep dive|first light|results?)/i,
-            /where should i send/i,
-            /where would you like me to send/i,
+            /\bname\b.{0,40}\bemail\b/i,
+            /\bemail\b.{0,40}\bname\b/i,
+            /to send you/i,
+            /send (?:you )?your /i,
+            /where (?:should|would) (?:i|we) send/i,
+            /receive your (?:report|deep dive|first light)/i,
+            /deliver your /i,
             /before we wrap up/i,
             /your guide will send/i,
-            /on the screen in front of you/i,
+            /on the screen/i,
+            /a box (?:will|is)/i,
+            /a (?:form|screen) (?:will|is)/i,
+            /fill (?:out|in) (?:a|the|your)/i,
+            /enter your/i,
         ];
         if (promptPatterns.some(p => p.test(lower))) {
             setShowEarlyCapture(prevShow => {
@@ -278,9 +283,6 @@ export default function VoiceInterface() {
             } catch (err) { console.warn('save-session failed:', err); }
 
             if (tier === null) {
-                // Use keepalive so the request survives the page redirect.
-                // freeToken is required server-side; the endpoint rejects
-                // unauthenticated free fulfillments.
                 try {
                     fetch('/api/fulfill-deep-dive', {
                         method: 'POST',
@@ -302,8 +304,6 @@ export default function VoiceInterface() {
 
         if (typeof window !== 'undefined') {
             if (tier === null) {
-                // Free-token users land on /report. Pass the token forward so
-                // the page can verify access server-side before rendering.
                 const url = freeToken
                     ? `/report?token=${encodeURIComponent(freeToken)}`
                     : '/report';
@@ -323,10 +323,6 @@ export default function VoiceInterface() {
         }
     }, [transcript, sessionId, selectedTier, freeToken, capturedFirstName, capturedEmail]);
 
-    // When voice ends, only auto-fulfill the free Deep Dive if the visitor
-    // arrived via a valid free-access token (existing client). Everyone else
-    // sees the pricing screen and must pay via GHL/Stripe; payment fulfillment
-    // is handled by the GHL webhook.
     useEffect(() => {
         if (callState !== 'ended') return;
         if (hasSubmittedRef.current) return;
@@ -355,7 +351,6 @@ export default function VoiceInterface() {
             sessionStorage.removeItem('bop_lead_data');
         }
 
-        // Reset submit lock for a fresh session
         hasSubmittedRef.current = false;
 
         setHasStarted(true);
@@ -470,8 +465,6 @@ export default function VoiceInterface() {
         }
     }, [detectPhase, checkDistress, checkForCapturePrompt, emailCaptured]);
 
-    // Start the voice session right away. We capture name/email
-    // mid-conversation when the AI guide naturally prompts for it.
     const handleBeginClick = useCallback(() => {
         startCall();
     }, [startCall]);
@@ -563,7 +556,6 @@ export default function VoiceInterface() {
                         </div>
                     </div>
 
-                    {/* Welcome video from Pamela */}
                     <div className="mb-8 max-w-md mx-auto">
                         <p className="text-slate-400 text-xs mb-2">A personal welcome from Pamela</p>
                         <div className="relative rounded-2xl overflow-hidden border border-slate-700 shadow-2xl" style={{ aspectRatio: '16 / 9' }}>
@@ -623,7 +615,6 @@ export default function VoiceInterface() {
                         Begin Voice Session
                     </button>
 
-                    {/* REAL PEOPLE. REAL SHIFTS. */}
                     <div className="mt-16 mb-10">
                         <p className="text-amber-400 text-xs font-bold uppercase tracking-[0.2em] mb-2">REAL PEOPLE. REAL SHIFTS.</p>
                         <p className="text-slate-400 text-base">Hear what happened when others met their Invisible Rule.</p>
@@ -773,7 +764,7 @@ export default function VoiceInterface() {
             </div>
 
             {callState !== 'idle' && callState !== 'ended' && (
-                <div className="pb-12 flex items-center justify-center gap-6">
+                <div className="pb-12 flex items-center justify-center gap-6 flex-wrap">
                     <button
                         onClick={() => setShowTranscript(v => !v)}
                         className="w-12 h-12 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center transition-colors"
@@ -803,6 +794,21 @@ export default function VoiceInterface() {
                         )}
                     </button>
 
+                    {!emailCaptured && (
+                        <button
+                            onClick={() => setShowEarlyCapture(true)}
+                            className="px-5 h-14 rounded-full bg-amber-500 hover:bg-amber-400 flex items-center justify-center transition-all hover:scale-105 active:scale-95 text-slate-900 font-semibold text-sm shadow-lg"
+                            title="Enter your name and email to receive the report"
+                        >
+                            Send me my report
+                        </button>
+                    )}
+                    {emailCaptured && (
+                        <div className="px-4 h-14 rounded-full bg-emerald-900/40 border border-emerald-700/50 flex items-center justify-center text-emerald-300 text-sm font-medium" title="Email saved">
+                            ✓ Email saved
+                        </div>
+                    )}
+
                     <button
                         onClick={endCall}
                         className="w-14 h-14 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
@@ -817,7 +823,6 @@ export default function VoiceInterface() {
 
             {showSafety && <SafetyModal onClose={() => setShowSafety(false)} />}
 
-            {/* Mid-session name/email capture modal (triggered when AI prompts) */}
             {showEarlyCapture && (
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
                     <div className="relative bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-8">
