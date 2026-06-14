@@ -168,7 +168,7 @@ export default function VoiceInterface() {
         }
     }, []);
 
-    const handleLeadSubmit = useCallback(async (firstName: string, email: string, tierOverride?: 1 | 2 | null) => {
+    const handleLeadSubmit = useCallback(async (firstName: string, email: string, tierOverride?: 1 | 2 | null, coupon?: string) => {
         if (hasSubmittedRef.current) return;
         hasSubmittedRef.current = true;
         setIsProcessingReport(true);
@@ -282,7 +282,7 @@ export default function VoiceInterface() {
                     await fetch('/api/send-report', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ firstName, email, report, tier }),
+                        body: JSON.stringify({ firstName, email, report, tier, coupon: coupon || null }),
                     });
                 } catch (err) { console.warn('Email send failed:', err); }
             }
@@ -294,6 +294,9 @@ export default function VoiceInterface() {
                     ? `/report?token=${encodeURIComponent(freeToken)}`
                     : '/report';
                 window.location.href = url;
+            } else if (tier === 1 && coupon) {
+                // Coupon applied — skip payment funnel, go straight to processing
+                window.location.href = `/processing?tier=1&free=1&coupon=${encodeURIComponent(coupon)}`;
             } else {
                 const GHL_URLS: Record<number, string> = {
                     1: process.env.NEXT_PUBLIC_GHL_URL_TIER1 || '/processing?tier=1',
@@ -301,7 +304,7 @@ export default function VoiceInterface() {
                     3: process.env.NEXT_PUBLIC_GHL_URL_TIER3 || '/mastery',
                 };
                 const baseUrl = GHL_URLS[tier] || '/report';
-                const finalUrl = tier === 3 
+                const finalUrl = tier === 3
                   ? baseUrl + '?name=' + encodeURIComponent(capturedFirstName || '') + '&email=' + encodeURIComponent(capturedEmail || '')
                   : baseUrl;
                 window.location.href = finalUrl;
@@ -920,11 +923,11 @@ export default function VoiceInterface() {
             {showPricing && (
                 <div className="fixed inset-0 z-50 overflow-y-auto">
                     <PricingScreen
-                        onSelectTier={(tier) => {
+                        onSelectTier={(tier, coupon) => {
                             setSelectedTier(tier);
                             setShowPricing(false);
                             if (capturedEmail && capturedFirstName) {
-                                handleLeadSubmit(capturedFirstName, capturedEmail, tier);
+                                handleLeadSubmit(capturedFirstName, capturedEmail, tier, coupon);
                             }
                         }}
                     />
