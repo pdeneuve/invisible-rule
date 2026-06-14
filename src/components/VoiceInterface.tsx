@@ -539,6 +539,20 @@ export default function VoiceInterface() {
                         </div>
                     </div>
 
+                    {/* Welcome video from Pamela */}
+                    <div className="mb-8 max-w-md mx-auto">
+                        <p className="text-slate-400 text-xs mb-2">A personal welcome from Pamela</p>
+                        <div className="relative rounded-2xl overflow-hidden border border-slate-700 shadow-2xl" style={{ aspectRatio: '16 / 9' }}>
+                            <iframe
+                                src="https://drive.google.com/file/d/1mMv2Zh_ML1LkOvbuFUA_xAOmRWVOO4tS/preview"
+                                allow="autoplay"
+                                allowFullScreen
+                                className="absolute inset-0 w-full h-full"
+                                title="A personal welcome from Pamela"
+                            />
+                        </div>
+                    </div>
+
                     <h1 className="text-4xl font-light text-white mb-3 tracking-tight">The Invisible Rule</h1>
                     <p className="text-xl text-amber-300/90 mb-3">Your unconscious operating system — made visible.</p>
                     <p className="text-slate-400 mb-10 leading-relaxed max-w-lg mx-auto">
