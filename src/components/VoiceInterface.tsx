@@ -501,25 +501,34 @@ export default function VoiceInterface() {
             console.warn('mid-session submit-lead failed:', err);
         }
 
-        // Nudge VAPI to continue the conversation. Two messages: a system
-        // hint with the captured data, and a brief assistant ack so the
-        // user hears confirmation and the AI moves on.
+        // Tell VAPI the user has submitted, then make the assistant speak
+        // out loud so the user knows it heard them and the conversation
+        // continues. We try multiple SDK methods because different VAPI
+        // versions expose different APIs.
         if (vapiRef.current) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const v = vapiRef.current as any;
+            const ackText = `Thank you, ${fn}. I will send your report to ${em} after we finish. Let's keep going.`;
+            // 1) Inject system context so the model knows the user provided info
             try {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const v = vapiRef.current as any;
                 if (typeof v.send === 'function') {
                     v.send({
                         type: 'add-message',
                         message: {
                             role: 'system',
-                            content: `The user just entered their first name "${fn}" and email "${em}". Briefly thank them by first name, confirm the report will be sent to that address after the session, and continue with the next question.`,
+                            content: `The user just submitted their first name (${fn}) and email (${em}) via the on-screen form. Their report will be sent to that email after the session. Continue with the next question.`,
                         },
                     });
                 }
-            } catch (err) {
-                console.warn('Could not nudge VAPI after capture:', err);
-            }
+            } catch (err) { console.warn('add-message failed:', err); }
+            // 2) Make the assistant actually SAY the acknowledgement out loud
+            try {
+                if (typeof v.say === 'function') {
+                    v.say(ackText, false);
+                } else if (typeof v.send === 'function') {
+                    v.send({ type: 'say', content: ackText, endCallAfterSpoken: false });
+                }
+            } catch (err) { console.warn('say failed:', err); }
         }
 
         setShowEarlyCapture(false);
