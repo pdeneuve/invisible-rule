@@ -653,8 +653,28 @@ export const REPORT_GENERATION_PROMPT = (sessionData: {
   hypothesis: string;
   archetype: string;
   version: 'A' | 'B';
+  firstLightAnchor?: { invisibleRule?: string; coreInsight?: string };
 }) => `
 You are generating a BOP ${sessionData.version === 'A' ? 'Core Insight Report (VERSION A)' : 'Expanded Transformation Dossier (VERSION B)'} based on a completed BOP session.
+
+${sessionData.firstLightAnchor?.invisibleRule ? `
+*** CRITICAL ANCHOR — READ FIRST ***
+The user has ALREADY received a First Light report containing the Invisible Rule statement below. This Deep Dive is an EXPANSION of that exact First Light statement — not a new diagnosis.
+
+You MUST:
+- Use the First Light Invisible Rule statement verbatim as the fullBopHypothesis field
+- Keep every section grounded in this same statement
+- NEVER produce a different Invisible Rule
+- Expand outward — origin, payoff, cost, plan — while keeping the central pattern identical
+
+FIRST LIGHT INVISIBLE RULE (use verbatim):
+${sessionData.firstLightAnchor.invisibleRule}
+
+${sessionData.firstLightAnchor.coreInsight ? `FIRST LIGHT CORE INSIGHT (preserve the thrust):
+${sessionData.firstLightAnchor.coreInsight}
+` : ''}
+*** END ANCHOR ***
+` : ''}
 
 SESSION TRANSCRIPT:
 ${sessionData.messages}

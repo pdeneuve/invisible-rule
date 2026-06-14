@@ -8,10 +8,11 @@ export const maxDuration = 300; // 5 minutes - needed for Australia + high-laten
 export async function POST(req: NextRequest) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
-  const { sessionState, tier }: {
+  const { sessionState, tier, firstLightAnchor }: {
     sessionState: SessionState;
     version?: 'A' | 'B';
     tier?: 1 | 2 | null;
+    firstLightAnchor?: { invisibleRule?: string; coreInsight?: string };
   } = await req.json();
 
   const messagesText = sessionState.messages
@@ -35,7 +36,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ report: reportData, tier: tier ?? null });
   }
 
-  // Tier 2 (Deep Dive $97): full multi-section report
+  // Tier 2 (Deep Dive $97): full multi-section report. If a First Light anchor
+  // is provided, the Deep Dive must expand THAT exact statement rather than
+  // produce a new one.
   const prompt = REPORT_GENERATION_PROMPT({
     messages: messagesText,
     tolerations: sessionState.tolerations,
@@ -43,6 +46,7 @@ export async function POST(req: NextRequest) {
     hypothesis,
     archetype: sessionState.detectedArchetype || 'Not yet determined',
     version: 'B',
+    firstLightAnchor,
   });
 
   const response = await client.messages.create({

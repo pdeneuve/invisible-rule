@@ -100,12 +100,16 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
   const handleGetDeepDive = async () => {
     setSubmitting(true);
     if (couponApplied) {
-      // Free fulfillment: trigger Deep Dive build and route to thank-you
+      // Free fulfillment: trigger Deep Dive build and route to thank-you.
+      // Pass sessionState so the server can regenerate as a real Deep Dive
+      // report (tier=2) before building the audio/slides/video.
       try {
         const reportData = localStorage.getItem('bop_report_a');
         const leadData = localStorage.getItem('bop_lead_data');
+        const sessionStateData = localStorage.getItem('bop_session_state');
         const parsedReport = reportData ? JSON.parse(reportData) : null;
         const parsedLead = leadData ? JSON.parse(leadData) : null;
+        const parsedSessionState = sessionStateData ? JSON.parse(sessionStateData) : null;
         if (parsedLead?.email && parsedReport) {
           fetch('/api/fulfill-deep-dive', {
             method: 'POST',
@@ -114,6 +118,7 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
               firstName: parsedLead.firstName,
               email: parsedLead.email,
               report: parsedReport,
+              sessionState: parsedSessionState,
               coupon: coupon.trim().toUpperCase(),
             }),
             keepalive: true,

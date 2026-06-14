@@ -17,6 +17,10 @@ interface FulfillRequestBody {
   freeToken?: string;
   internalSecret?: string;
   coupon?: string;
+  // When called from the First Light → Deep Dive upsell, the client passes
+  // the original session so we can regenerate a real tier-2 report that
+  // EXPANDS the First Light Invisible Rule rather than producing a new one.
+  sessionState?: unknown;
 }
 
 const VALID_COUPONS = ['DEEPDIVEGIFT', 'CLIENT2026', 'TESTIMONIAL2026', 'VIPACCESS'];
@@ -147,7 +151,8 @@ async function sendEmail(
 export async function POST(req: NextRequest) {
   try {
     const body: FulfillRequestBody = await req.json();
-    const { firstName, email, report } = body;
+    const { firstName, email } = body;
+    let report = body.report;
 
     if (!isAuthorized(body)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -155,6 +160,39 @@ export async function POST(req: NextRequest) {
 
     if (!email || !report) {
       return NextResponse.json({ error: 'Missing email or report' }, { status: 400 });
+    }
+
+    // If the caller passed the original session AND the report we have is a
+    // First Light shape (lacks the 12-section Deep Dive keys), regenerate
+    // the report as a Deep Dive that EXPANDS the First Light Invisible Rule.
+    const looksLikeFirstLight = !report.fullBopHypothesis && !!report.invisibleRule;
+    if (body.sessionState && looksLikeFirstLight) {
+      try {
+        const regenRes = await fetch(`${appUrl()}/api/generate-report`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionState: body.sessionState,
+            tier: 2,
+            firstLightAnchor: {
+              invisibleRule: report.invisibleRule,
+              coreInsight: report.coreInsight,
+            },
+          }),
+        });
+        if (regenRes.ok) {
+          const json = await regenRes.json();
+          if (json?.report) {
+            report = json.report;
+          } else {
+            console.error('Deep Dive regenerate returned no report');
+          }
+        } else {
+          console.error('Deep Dive regenerate failed:', regenRes.status, await regenRes.text());
+        }
+      } catch (err) {
+        console.error('Deep Dive regenerate error:', err);
+      }
     }
 
     const [audioUrl, videoRenderId, slidesUrl] = await Promise.all([

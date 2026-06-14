@@ -247,6 +247,9 @@ export default function VoiceInterface() {
             localStorage.setItem('bop_report_a', JSON.stringify(report));
             localStorage.setItem('bop_lead_data', JSON.stringify(leadData));
             localStorage.setItem('bop_tier', String(tier));
+            try {
+                localStorage.setItem('bop_session_state', JSON.stringify(sessionStateForReport));
+            } catch (err) { console.warn('Could not persist session state:', err); }
         }
 
         if (report) {
