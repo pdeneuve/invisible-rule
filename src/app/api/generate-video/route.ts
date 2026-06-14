@@ -313,7 +313,10 @@ export async function POST(request: NextRequest) {
     const name = firstName || 'Friend';
 
     console.log('Step 1: Generating narration script via Claude...');
-    const narrationSegments = await generateNarrationScript(report, name, ANTHROPIC_API_KEY);
+    const rawSegments = await generateNarrationScript(report, name, ANTHROPIC_API_KEY);
+    // Sanitize once at the source so both the ElevenLabs voice clips AND
+    // the Creatomate scene captions get TTS- and render-safe text.
+    const narrationSegments = rawSegments.map(s => sanitizeForTTS(s)).filter(s => s.length > 0);
     console.log(`Generated ${narrationSegments.length} narration segments`);
 
     console.log('Step 2: Generating voice clips via ElevenLabs...');

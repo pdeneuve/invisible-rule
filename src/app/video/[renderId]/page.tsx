@@ -16,6 +16,13 @@ export default function VideoStatusPage({
   const { renderId } = use(params);
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    const tick = setInterval(() => setElapsedSec(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    return () => clearInterval(tick);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,12 +106,24 @@ export default function VideoStatusPage({
     );
   }
 
+  const stalled = elapsedSec > 600; // 10 minutes
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
-      <div className="text-center max-w-sm">
+      <div className="text-center max-w-md">
         <div className="w-12 h-12 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
         <p className="text-slate-300 mb-1">Your video is being rendered.</p>
-        <p className="text-slate-500 text-sm">This usually takes 3 to 5 minutes. This page updates automatically.</p>
+        <p className="text-slate-500 text-sm">
+          Status: <span className="text-slate-400 font-mono">{status.status}</span>
+          {' '}· Elapsed {Math.floor(elapsedSec / 60)}:{String(elapsedSec % 60).padStart(2, '0')}
+        </p>
+        <p className="text-slate-500 text-sm mt-1">This usually takes 3 to 5 minutes. This page updates automatically.</p>
+        {stalled && (
+          <div className="mt-6 bg-red-900/30 border border-red-700/40 rounded-xl p-4 text-left">
+            <p className="text-red-300 text-sm mb-2">Render has been pending for over 10 minutes.</p>
+            <p className="text-slate-400 text-xs mb-1">Render ID: <span className="font-mono">{renderId}</span></p>
+            <p className="text-slate-400 text-xs">Check Creatomate dashboard for details.</p>
+          </div>
+        )}
       </div>
     </div>
   );
