@@ -606,9 +606,9 @@ export default function VoiceInterface() {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10 text-left">
                         {[
-                            { quote: 'It felt like Pamela was in the room with me', videoId: '1WZiZjSud2omfiNYyJlVbhFhR3-XUe2Zs' },
+                            { quote: 'It felt like Pamela was in the room with me', videoId: '1CeGehBRDcNZ1pcS4Gu_TQsFYUWtv2O0q' },
                             { quote: 'I went from Skeptic to Believer', videoId: '1FVMlZvq38zcS2agc998kncYjUB9JhLgc' },
-                            { quote: 'I finally broke my patterns', videoId: '1Hg9jVE8Mi6rHn8qhPO-ObCBH_vH7Q051' },
+                            { quote: 'I finally broke my patterns', videoId: '1WZiZjSud2omfiNYyJlVbhFhR3-XUe2Zs' },
                             { quote: 'The Invisible Rule that changed my confidence forever', videoId: '1kE53Nm43eCiZtHMqznKHc9dgvgUAh-Wf' },
                         ].map((t, i) => (
                             <div
