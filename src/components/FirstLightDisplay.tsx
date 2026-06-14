@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
 
 interface Props {
@@ -6,10 +7,90 @@ interface Props {
   firstName?: string;
 }
 
+const VALID_COUPONS = ['DEEPDIVEGIFT', 'CLIENT2026', 'TESTIMONIAL2026', 'VIPACCESS'];
+const DEEP_DIVE_VIDEO_ID = '1Ilxg_Ogzt8_WWkiUozKJbX_b45YK1Dxx';
+
+const DEEP_DIVE_BENEFITS = [
+  {
+    icon: '📄',
+    title: 'Your 12-point Core Insight Report',
+    body: 'Every layer of your Invisible Rule mapped out — origin, payoff, cost, evolved principle, 30-day plan.',
+  },
+  {
+    icon: '🎥',
+    title: 'A personalized video from Pamela',
+    body: 'Pamela walks you through your specific pattern, in her own voice, addressed to you by name.',
+  },
+  {
+    icon: '🎧',
+    title: 'A personalized podcast with a 3D view',
+    body: 'Listen on the go — your pattern explored from every angle so it sticks.',
+  },
+  {
+    icon: '🖼️',
+    title: 'A personalized slide presentation',
+    body: 'See what you have done — and exactly how to get past it — in a deck you can keep and share.',
+  },
+];
+
 export default function FirstLightDisplay({ report, firstName }: Props) {
   const name = firstName || 'Friend';
   const bop = report.bopStatement || report.invisibleRule || '';
   const ctx = report.context || report.originContext || '';
+
+  const [coupon, setCoupon] = useState('');
+  const [couponApplied, setCouponApplied] = useState(false);
+  const [couponError, setCouponError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleApplyCoupon = () => {
+    const code = coupon.trim().toUpperCase();
+    if (!code) {
+      setCouponError('Please enter a coupon code.');
+      return;
+    }
+    if (!VALID_COUPONS.includes(code)) {
+      setCouponError('That code is not recognized.');
+      setCouponApplied(false);
+      return;
+    }
+    setCouponError('');
+    setCouponApplied(true);
+    setCoupon(code);
+  };
+
+  const handleGetDeepDive = async () => {
+    setSubmitting(true);
+    if (couponApplied) {
+      // Free fulfillment: trigger Deep Dive build and route to thank-you
+      try {
+        const reportData = localStorage.getItem('bop_report_a');
+        const leadData = localStorage.getItem('bop_lead_data');
+        const parsedReport = reportData ? JSON.parse(reportData) : null;
+        const parsedLead = leadData ? JSON.parse(leadData) : null;
+        if (parsedLead?.email && parsedReport) {
+          fetch('/api/fulfill-deep-dive', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              firstName: parsedLead.firstName,
+              email: parsedLead.email,
+              report: parsedReport,
+              coupon: coupon.trim().toUpperCase(),
+            }),
+            keepalive: true,
+          });
+        }
+      } catch (err) {
+        console.warn('Deep Dive fulfillment trigger failed:', err);
+      }
+      window.location.href = `/thank-you?tier=2&coupon=${encodeURIComponent(coupon.trim().toUpperCase())}`;
+      return;
+    }
+    // No coupon: route to GHL Deep Dive funnel (with internal fallback)
+    const ghlUrl = process.env.NEXT_PUBLIC_GHL_URL_TIER2;
+    window.location.href = ghlUrl || '/processing?tier=2';
+  };
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -68,6 +149,115 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
           >
             Return to home
           </Link>
+        </div>
+
+        {/* Deep Dive upsell */}
+        <div className="mt-20 pt-12 border-t border-slate-800/80">
+          <div className="text-center mb-10">
+            <p className="text-amber-400 text-xs font-bold uppercase tracking-[0.2em] mb-3">Ready to go deeper?</p>
+            <h2 className="text-3xl font-light text-white mb-3 tracking-tight">
+              The Deep Dive — built for your Invisible Rule
+            </h2>
+            <p className="text-slate-400 text-base leading-relaxed max-w-lg mx-auto">
+              Everything below is personalized to the pattern you just uncovered. Yours alone — not a template.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+            {DEEP_DIVE_BENEFITS.map((b, i) => (
+              <div
+                key={i}
+                className="rounded-2xl p-5 border border-amber-500/20"
+                style={{ background: 'rgba(15,23,42,0.7)' }}
+              >
+                <div className="text-2xl mb-2">{b.icon}</div>
+                <h3 className="text-white text-base font-medium mb-1.5">{b.title}</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">{b.body}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mb-10">
+            <p className="text-slate-400 text-sm text-center mb-3">A personal note from Pamela about The Deep Dive</p>
+            <div className="relative rounded-2xl overflow-hidden border border-amber-500/30 shadow-2xl" style={{ aspectRatio: '16 / 9' }}>
+              <iframe
+                src={`https://drive.google.com/file/d/${DEEP_DIVE_VIDEO_ID}/preview`}
+                allow="autoplay"
+                allowFullScreen
+                className="absolute inset-0 w-full h-full"
+                title="Pamela on The Deep Dive"
+              />
+            </div>
+          </div>
+
+          <div
+            className="rounded-2xl p-7 mb-6"
+            style={{
+              background: 'linear-gradient(135deg,rgba(245,158,11,0.10),rgba(180,83,9,0.05))',
+              border: '1px solid rgba(245,158,11,0.35)',
+            }}
+          >
+            <div className="flex items-end gap-2 justify-center mb-2">
+              {couponApplied ? (
+                <>
+                  <span className="text-4xl font-light text-white">FREE</span>
+                  <span className="text-slate-500 line-through text-lg mb-1">$97</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-4xl font-light text-white">$97</span>
+                </>
+              )}
+            </div>
+            <p className="text-center text-slate-400 text-sm mb-6">
+              Hear it. Read it. Feel it. Share it.
+            </p>
+
+            <div className="mb-4">
+              <label className="block text-slate-400 text-xs uppercase tracking-wider mb-2">
+                Have a coupon code?
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={coupon}
+                  onChange={e => { setCoupon(e.target.value); setCouponError(''); setCouponApplied(false); }}
+                  placeholder="Enter code"
+                  className="flex-1 bg-slate-800 text-white placeholder-slate-500 border border-slate-700 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition-colors uppercase"
+                  disabled={couponApplied || submitting}
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyCoupon}
+                  disabled={couponApplied || submitting}
+                  className="px-4 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-colors disabled:opacity-60"
+                >
+                  {couponApplied ? '✓ Applied' : 'Apply'}
+                </button>
+              </div>
+              {couponError && <p className="text-red-400 text-xs mt-2">{couponError}</p>}
+              {couponApplied && <p className="text-emerald-400 text-xs mt-2">Coupon applied — The Deep Dive is free for you.</p>}
+            </div>
+
+            <button
+              onClick={handleGetDeepDive}
+              disabled={submitting}
+              className="w-full py-4 rounded-xl font-semibold text-base text-slate-900 transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{
+                background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
+                boxShadow: '0 8px 32px rgba(245, 158, 11, 0.25)',
+              }}
+            >
+              {submitting
+                ? 'Loading...'
+                : couponApplied
+                  ? 'Send my Deep Dive'
+                  : 'Get The Deep Dive — $97'}
+            </button>
+            <p className="text-center text-slate-500 text-xs mt-4">
+              Secure payment. Instant delivery. No subscriptions.
+            </p>
+          </div>
         </div>
 
         <div className="text-center mt-10">
