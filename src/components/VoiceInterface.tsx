@@ -35,6 +35,7 @@ export default function VoiceInterface() {
     const [showPricing, setShowPricing] = useState(false);
     const [selectedTier, setSelectedTier] = useState<1 | 2 | null>(null);
     const [showSafety, setShowSafety] = useState(false);
+    const [playingTestimonial, setPlayingTestimonial] = useState<number | null>(null);
     const [isMuted, setIsMuted] = useState(false);
     const [sessionId] = useState(() => uuidv4());
     const [callDuration, setCallDuration] = useState(0);
@@ -606,23 +607,45 @@ export default function VoiceInterface() {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10 text-left">
                         {[
-                            { quote: 'It felt like Pamela was in the room with me', videoId: '1CeGehBRDcNZ1pcS4Gu_TQsFYUWtv2O0q' },
-                            { quote: 'I went from Skeptic to Believer', videoId: '1FVMlZvq38zcS2agc998kncYjUB9JhLgc' },
-                            { quote: 'I finally broke my patterns', videoId: '1WZiZjSud2omfiNYyJlVbhFhR3-XUe2Zs' },
-                            { quote: 'The Invisible Rule that changed my confidence forever', videoId: '1kE53Nm43eCiZtHMqznKHc9dgvgUAh-Wf' },
+                            { quote: 'It felt like Pamela was in the room with me', videoId: '1CeGehBRDcNZ1pcS4Gu_TQsFYUWtv2O0q', thumbId: '1iZdEbQCrWKkebFSumLh4ASh1TZjHhL8M' },
+                            { quote: 'I went from Skeptic to Believer', videoId: '1FVMlZvq38zcS2agc998kncYjUB9JhLgc', thumbId: '1Hg9jVE8Mi6rHn8qhPO-ObCBH_vH7Q051' },
+                            { quote: 'I finally broke my patterns', videoId: '1WZiZjSud2omfiNYyJlVbhFhR3-XUe2Zs', thumbId: '1qVfyzFE1nizjodNYPMluAeqA3GbSTxzx' },
+                            { quote: 'The Invisible Rule that changed my confidence forever', videoId: '1kE53Nm43eCiZtHMqznKHc9dgvgUAh-Wf', thumbId: '1lsIQkQr9aaR4lU6g1SioKtmcjc6IZg9S' },
                         ].map((t, i) => (
                             <div
                                 key={i}
                                 className="bg-slate-900/60 border border-amber-500/20 rounded-2xl overflow-hidden flex flex-col"
                             >
                                 <div className="relative w-full" style={{ aspectRatio: '16 / 9' }}>
-                                    <iframe
-                                        src={`https://drive.google.com/file/d/${t.videoId}/preview`}
-                                        allow="autoplay"
-                                        allowFullScreen
-                                        className="absolute inset-0 w-full h-full"
-                                        title={t.quote}
-                                    />
+                                    {playingTestimonial === i ? (
+                                        <iframe
+                                            src={`https://drive.google.com/file/d/${t.videoId}/preview`}
+                                            allow="autoplay"
+                                            allowFullScreen
+                                            className="absolute inset-0 w-full h-full"
+                                            title={t.quote}
+                                        />
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => setPlayingTestimonial(i)}
+                                            className="absolute inset-0 w-full h-full group"
+                                            aria-label={`Play testimonial: ${t.quote}`}
+                                        >
+                                            <img
+                                                src={`https://drive.google.com/thumbnail?id=${t.thumbId}&sz=w800`}
+                                                alt={t.quote}
+                                                className="w-full h-full object-cover"
+                                            />
+                                            <div className="absolute inset-0 bg-black/30 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                                <div className="w-16 h-16 rounded-full bg-amber-500/95 group-hover:bg-amber-400 flex items-center justify-center shadow-2xl transition-colors">
+                                                    <svg className="w-7 h-7 text-slate-900 ml-1" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path d="M8 5v14l11-7z" />
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    )}
                                 </div>
                                 <p className="text-slate-200 text-[15px] leading-relaxed italic p-5">&ldquo;{t.quote}&rdquo;</p>
                             </div>
