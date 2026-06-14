@@ -56,5 +56,32 @@ export async function POST(req: NextRequest) {
   if (!jsonMatch) return NextResponse.json({ error: 'Failed to parse report' }, { status: 500 });
 
   const reportData = JSON.parse(jsonMatch[0]);
+
+  // Version A aliases: downstream consumers (generate-audio, generate-video,
+  // generate-slides) read Version A field names. Add aliases so the Version B
+  // Deep Dive content reaches the podcast/video/slides prompts. Only fill if
+  // the target key is absent - never overwrite real content.
+  if (!reportData.bopStatement && reportData.fullBopHypothesis) {
+    reportData.bopStatement = reportData.fullBopHypothesis;
+  }
+  if (!reportData.whatItProtected && reportData.payoffAndCost) {
+    reportData.whatItProtected = reportData.payoffAndCost;
+  }
+  if (!reportData.costToday && reportData.payoffAndCost) {
+    reportData.costToday = reportData.payoffAndCost;
+  }
+  if (!reportData.evolvedPrinciple && reportData.newOperatingPrinciple) {
+    reportData.evolvedPrinciple = reportData.newOperatingPrinciple;
+  }
+  if (!reportData.nextSteps && reportData.thirtyDayPlan) {
+    reportData.nextSteps = reportData.thirtyDayPlan;
+  }
+  if (!reportData.evidenceSection && reportData.originContext) {
+    reportData.evidenceSection = reportData.originContext;
+  }
+  if (!reportData.tolerationsSummary && reportData.tolerationsMapped) {
+    reportData.tolerationsSummary = reportData.tolerationsMapped;
+  }
+
   return NextResponse.json({ report: reportData, version: 'B', tier: 2 });
 }
