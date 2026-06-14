@@ -606,19 +606,25 @@ export default function VoiceInterface() {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10 text-left">
                         {[
-                            'It felt like Pamela was in the room with me',
-                            'I went from Skeptic to Believer',
-                            'I finally broke my patterns',
-                            'The Invisible Rule that changed my confidence forever',
-                        ].map((quote, i) => (
+                            { quote: 'It felt like Pamela was in the room with me', videoId: '1WZiZjSud2omfiNYyJlVbhFhR3-XUe2Zs' },
+                            { quote: 'I went from Skeptic to Believer', videoId: '1FVMlZvq38zcS2agc998kncYjUB9JhLgc' },
+                            { quote: 'I finally broke my patterns', videoId: '1Hg9jVE8Mi6rHn8qhPO-ObCBH_vH7Q051' },
+                            { quote: 'The Invisible Rule that changed my confidence forever', videoId: '1kE53Nm43eCiZtHMqznKHc9dgvgUAh-Wf' },
+                        ].map((t, i) => (
                             <div
                                 key={i}
-                                className="bg-gradient-to-br from-slate-800/70 to-slate-900/70 border border-amber-500/20 rounded-2xl p-6"
+                                className="bg-slate-900/60 border border-amber-500/20 rounded-2xl overflow-hidden flex flex-col"
                             >
-                                <svg className="w-6 h-6 text-amber-400/70 mb-3" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="M9.983 3v7.391c0 5.704-3.731 9.57-8.983 10.609l-.995-2.151c2.432-.917 3.995-3.638 3.995-5.849h-4v-10h9.983zm14.017 0v7.391c0 5.704-3.748 9.571-9 10.609l-.996-2.151c2.433-.917 3.996-3.638 3.996-5.849h-3.983v-10h9.983z" />
-                                </svg>
-                                <p className="text-slate-200 text-[15px] leading-relaxed italic">&ldquo;{quote}&rdquo;</p>
+                                <div className="relative w-full" style={{ aspectRatio: '16 / 9' }}>
+                                    <iframe
+                                        src={`https://drive.google.com/file/d/${t.videoId}/preview`}
+                                        allow="autoplay"
+                                        allowFullScreen
+                                        className="absolute inset-0 w-full h-full"
+                                        title={t.quote}
+                                    />
+                                </div>
+                                <p className="text-slate-200 text-[15px] leading-relaxed italic p-5">&ldquo;{t.quote}&rdquo;</p>
                             </div>
                         ))}
                     </div>
