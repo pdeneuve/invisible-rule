@@ -1,19 +1,48 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 const THANK_YOU_VIDEO_ID = '1YdfL-JEKAkAbw3nl0MDSinB6fzQYOqIn';
 
 export default function ThankYouContent() {
   const [firstName, setFirstName] = useState('');
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    let leadFirstName = '';
     try {
       const leadData = localStorage.getItem('bop_lead_data');
-      if (leadData) setFirstName(JSON.parse(leadData).firstName || '');
+      if (leadData) {
+        leadFirstName = JSON.parse(leadData).firstName || '';
+        setFirstName(leadFirstName);
+      }
     } catch { /* ignore */ }
-  }, []);
+
+    // If we arrived from Stripe Checkout, verify the payment and trigger
+    // Deep Dive fulfillment server-side.
+    const stripeSessionId = searchParams.get('stripe_session_id');
+    if (stripeSessionId) {
+      try {
+        const reportData = localStorage.getItem('bop_report_a');
+        const sessionStateData = localStorage.getItem('bop_session_state');
+        const parsedReport = reportData ? JSON.parse(reportData) : null;
+        const parsedSessionState = sessionStateData ? JSON.parse(sessionStateData) : null;
+        fetch('/api/verify-stripe-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: stripeSessionId,
+            report: parsedReport,
+            sessionState: parsedSessionState,
+          }),
+        }).catch(err => console.warn('verify-stripe-payment failed:', err));
+      } catch (err) {
+        console.warn('Could not trigger Stripe verification:', err);
+      }
+    }
+  }, [searchParams]);
 
   const name = firstName || 'Friend';
 

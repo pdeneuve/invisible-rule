@@ -130,9 +130,32 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
       window.location.href = `/thank-you?tier=2&coupon=${encodeURIComponent(coupon.trim().toUpperCase())}`;
       return;
     }
-    // No coupon: route to GHL Deep Dive funnel (with internal fallback)
-    const ghlUrl = process.env.NEXT_PUBLIC_GHL_URL_TIER2;
-    window.location.href = ghlUrl || '/processing?tier=2';
+    // No coupon: go straight to Stripe Checkout (not GHL)
+    try {
+      const leadData = localStorage.getItem('bop_lead_data');
+      const parsedLead = leadData ? JSON.parse(leadData) : null;
+      const r = await fetch('/api/create-stripe-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: parsedLead?.firstName || '',
+          email: parsedLead?.email || '',
+          tier: 2,
+        }),
+      });
+      const json = await r.json();
+      if (r.ok && json.url) {
+        window.location.href = json.url;
+        return;
+      }
+      console.error('Stripe checkout failed:', json);
+      alert(`Could not start checkout. ${json?.error || ''}`);
+      setSubmitting(false);
+    } catch (err) {
+      console.error('Stripe checkout error:', err);
+      alert('Could not start checkout. Please try again.');
+      setSubmitting(false);
+    }
   };
 
   return (
