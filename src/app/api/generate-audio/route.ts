@@ -8,6 +8,25 @@ export const maxDuration = 300;
 const PAMELA_VOICE_ID = 'ZPJulgnHgp8y0rGE6kJ4';
 const BRIAN_VOICE_ID = 'nPczCjzI2devNBz1zQrb';
 
+/**
+ * Strip AI-typography characters that cause ElevenLabs TTS to garble.
+ * Claude/GPT default to em-dashes, en-dashes, curly quotes, ellipsis,
+ * bullets and other non-ASCII punctuation. TTS reads them literally
+ * or chokes on them. Replace with TTS-friendly equivalents.
+ */
+function sanitizeForTTS(text: string): string {
+  return text
+    .replace(/[—–]/g, ', ')          // em-dash, en-dash → comma+space
+    .replace(/[“”„‟]/g, '"') // curly double quotes → straight
+    .replace(/[‘’‚‛]/g, "'") // curly single quotes → straight
+    .replace(/…/g, '.')                    // ellipsis → period
+    .replace(/[•·‣◦]/g, '') // bullets → drop
+    .replace(/[ ]/g, ' ')                  // non-breaking space → regular space
+    .replace(/[*_~`]/g, '')                     // stray markdown → drop
+    .replace(/\s+/g, ' ')                       // collapse whitespace
+    .trim();
+}
+
 const VOICE_SETTINGS: Record<string, object> = {
   pamela: {
     stability: 0.25,
@@ -100,7 +119,9 @@ export async function POST(req: NextRequest) {
   const audioBuffers: ArrayBuffer[] = [];
 
   for (const segment of script) {
-    const buffer = await generateSegmentAudio(segment.text, segment.speaker, elevenlabsKey);
+    const cleanText = sanitizeForTTS(segment.text);
+    if (!cleanText) continue;
+    const buffer = await generateSegmentAudio(cleanText, segment.speaker, elevenlabsKey);
     audioBuffers.push(buffer);
   }
 
