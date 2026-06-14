@@ -16,13 +16,17 @@ interface FulfillRequestBody {
   report: Record<string, string>;
   freeToken?: string;
   internalSecret?: string;
+  coupon?: string;
 }
+
+const VALID_COUPONS = ['DEEPDIVEGIFT', 'CLIENT2026', 'TESTIMONIAL2026', 'VIPACCESS'];
 
 function isAuthorized(body: FulfillRequestBody): boolean {
   const freeToken = process.env.FREE_DEEP_DIVE_TOKEN || '';
   const internalSecret = process.env.INTERNAL_FULFILL_SECRET || '';
   if (internalSecret && body.internalSecret === internalSecret) return true;
   if (freeToken && body.freeToken === freeToken) return true;
+  if (body.coupon && VALID_COUPONS.includes(body.coupon.toUpperCase())) return true;
   return false;
 }
 

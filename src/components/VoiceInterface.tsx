@@ -279,12 +279,26 @@ export default function VoiceInterface() {
                 } catch (err) { console.warn('fulfill-deep-dive trigger failed:', err); }
             } else if (tier === 1) {
                 try {
-                    await fetch('/api/send-report', {
+                    const r = await fetch('/api/send-report', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ firstName, email, report, tier, coupon: coupon || null }),
                     });
-                } catch (err) { console.warn('Email send failed:', err); }
+                    if (!r.ok) {
+                        const errText = await r.text();
+                        console.error('send-report failed:', r.status, errText);
+                        if (typeof window !== 'undefined') {
+                            localStorage.setItem('bop_email_error', `Status ${r.status}: ${errText}`);
+                        }
+                    } else if (typeof window !== 'undefined') {
+                        localStorage.setItem('bop_email_sent', 'true');
+                    }
+                } catch (err) {
+                    console.warn('Email send failed:', err);
+                    if (typeof window !== 'undefined') {
+                        localStorage.setItem('bop_email_error', String(err));
+                    }
+                }
             }
         }
 

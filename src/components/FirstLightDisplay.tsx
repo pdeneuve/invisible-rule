@@ -42,6 +42,44 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
   const [couponApplied, setCouponApplied] = useState(false);
   const [couponError, setCouponError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [emailErrorDetail, setEmailErrorDetail] = useState('');
+
+  const handleResendEmail = async () => {
+    if (typeof window === 'undefined') return;
+    setEmailStatus('sending');
+    setEmailErrorDetail('');
+    try {
+      const leadData = localStorage.getItem('bop_lead_data');
+      const reportData = localStorage.getItem('bop_report_a');
+      const parsedLead = leadData ? JSON.parse(leadData) : null;
+      const parsedReport = reportData ? JSON.parse(reportData) : report;
+      if (!parsedLead?.email) {
+        setEmailStatus('error');
+        setEmailErrorDetail('No email address found.');
+        return;
+      }
+      const r = await fetch('/api/send-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: parsedLead.firstName,
+          email: parsedLead.email,
+          report: parsedReport,
+          tier: 1,
+        }),
+      });
+      if (r.ok) {
+        setEmailStatus('sent');
+      } else {
+        setEmailStatus('error');
+        setEmailErrorDetail(`Server returned ${r.status}. ${await r.text()}`);
+      }
+    } catch (err) {
+      setEmailStatus('error');
+      setEmailErrorDetail(String(err));
+    }
+  };
 
   const handleApplyCoupon = () => {
     const code = coupon.trim().toUpperCase();
@@ -149,6 +187,24 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
           >
             Return to home
           </Link>
+        </div>
+
+        <div className="mt-6 rounded-2xl p-5 text-center" style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(51,65,85,0.8)' }}>
+          <p className="text-slate-400 text-sm mb-3">Didn&apos;t receive the email?</p>
+          <button
+            onClick={handleResendEmail}
+            disabled={emailStatus === 'sending'}
+            className="px-5 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-colors disabled:opacity-60"
+          >
+            {emailStatus === 'sending'
+              ? 'Sending...'
+              : emailStatus === 'sent'
+                ? '✓ Email sent — check your inbox'
+                : 'Resend my First Light email'}
+          </button>
+          {emailStatus === 'error' && (
+            <p className="text-red-400 text-xs mt-3">{emailErrorDetail || 'Could not send. Try again.'}</p>
+          )}
         </div>
 
         {/* Deep Dive upsell */}
