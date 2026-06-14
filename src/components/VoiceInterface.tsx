@@ -42,6 +42,7 @@ export default function VoiceInterface() {
     const [showTranscript, setShowTranscript] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [connectionTimedOut, setConnectionTimedOut] = useState(false);
+    const [isProcessingReport, setIsProcessingReport] = useState(false);
 
     // Email captured during voice session at a natural prompt point
     const [emailCaptured, setEmailCaptured] = useState(false);
@@ -54,7 +55,6 @@ export default function VoiceInterface() {
     const [earlySubmitting, setEarlySubmitting] = useState(false);
 
     // Free-access token from URL ?token=... (existing-client free Deep Dive).
-    // Validated server-side via /api/validate-free-token before granting access.
     const [freeToken, setFreeToken] = useState('');
     const [freeTokenValid, setFreeTokenValid] = useState(false);
 
@@ -63,10 +63,8 @@ export default function VoiceInterface() {
     const durationRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const callStartTimeRef = useRef<number | null>(null);
     const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    // Submit-lock so fulfillment never runs more than once per session
     const hasSubmittedRef = useRef(false);
 
-    // Pre-fill the consent form with any cached values from a prior session.
     useEffect(() => {
         if (typeof window === 'undefined') return;
         const ce = localStorage.getItem('captured_email');
@@ -134,10 +132,6 @@ export default function VoiceInterface() {
         }
     }, []);
 
-    // Watch the AI guide's speech for a natural moment to capture the
-    // participant's name and email mid-conversation. When triggered,
-    // open the capture modal after a short pause so the user hears the
-    // prompt finish first.
     const checkForCapturePrompt = useCallback((text: string) => {
         const lower = text.toLowerCase();
         const promptPatterns = [
@@ -159,7 +153,6 @@ export default function VoiceInterface() {
         if (promptPatterns.some(p => p.test(lower))) {
             setShowEarlyCapture(prevShow => {
                 if (prevShow) return prevShow;
-                // Slight delay so the user actually hears the prompt finish.
                 setTimeout(() => setShowEarlyCapture(true), 1500);
                 return prevShow;
             });
@@ -178,14 +171,10 @@ export default function VoiceInterface() {
     }, []);
 
     const handleLeadSubmit = useCallback(async (firstName: string, email: string, tierOverride?: 1 | 2 | null) => {
-        // Prevent duplicate submissions
         if (hasSubmittedRef.current) return;
         hasSubmittedRef.current = true;
+        setIsProcessingReport(true);
 
-        // Prefer the explicit argument when the caller already knows the tier
-        // (e.g. pricing screen). selectedTier from state can be stale because
-        // setSelectedTier in the same tick has not yet applied when this
-        // callback fires synchronously after the click.
         const tier = tierOverride !== undefined ? tierOverride : selectedTier;
         const reportTier: 1 | 2 = tier === 1 ? 1 : 2;
         const transcriptText = transcript
@@ -212,7 +201,6 @@ export default function VoiceInterface() {
             completedAt: new Date().toISOString(),
         };
 
-        // Tag as session-completed (stops the abandoned-visitor drip)
         try {
             await fetch('/api/submit-lead', {
                 method: 'POST',
@@ -326,15 +314,22 @@ export default function VoiceInterface() {
     useEffect(() => {
         if (callState !== 'ended') return;
         if (hasSubmittedRef.current) return;
-        if (!emailCaptured) return;
-        if (!capturedEmail || !capturedFirstName) return;
+        if (showPricing) return;
+
+        // If we never captured the name/email mid-conversation, open that
+        // modal now so the user isn't stranded on a blank screen.
+        if (!emailCaptured || !capturedEmail || !capturedFirstName) {
+            setShowEarlyCapture(true);
+            return;
+        }
 
         if (freeTokenValid) {
             handleLeadSubmit(capturedFirstName, capturedEmail);
         } else {
+            // Default flow: show First Light ($7) + Deep Dive ($97) pricing.
             setShowPricing(true);
         }
-    }, [callState, emailCaptured, capturedEmail, capturedFirstName, freeTokenValid, handleLeadSubmit]);
+    }, [callState, emailCaptured, capturedEmail, capturedFirstName, freeTokenValid, handleLeadSubmit, showPricing]);
 
     const startCall = useCallback(async () => {
         try {
@@ -352,6 +347,7 @@ export default function VoiceInterface() {
         }
 
         hasSubmittedRef.current = false;
+        setIsProcessingReport(false);
 
         setHasStarted(true);
         setErrorMessage(null);
@@ -722,21 +718,31 @@ export default function VoiceInterface() {
                     {callState === 'active' && <p className="text-slate-500 text-base">Listening...</p>}
                     {callState === 'ai-speaking' && <p className="text-amber-400/80 text-base">Speaking</p>}
                     {callState === 'user-speaking' && <p className="text-blue-400/80 text-base">I&apos;m listening</p>}
-                    {callState === 'ended' && !showPricing && (
+                    {callState === 'ended' && !showPricing && !showEarlyCapture && isProcessingReport && (
                         <div className="text-center px-4">
                             <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center"
                                 style={{ background: 'radial-gradient(circle at 40% 40%, #fbbf24, #d97706)' }}>
                                 <div className="w-8 h-8 border-2 border-slate-900/60 border-t-transparent rounded-full animate-spin" />
                             </div>
                             <h2 className="text-3xl md:text-4xl font-light text-white mb-4 tracking-tight">
-                                Your Deep Dive is being prepared...
+                                Your report is being prepared...
                             </h2>
                             <p className="text-slate-300 text-lg leading-relaxed mb-3">
-                                This takes about 10 minutes.
+                                This takes a few minutes.
                             </p>
                             <p className="text-slate-400 text-base leading-relaxed max-w-md mx-auto">
-                                Check your email for your full Deep Dive — report, podcast, video, and slides.
-                                You can close this window. Everything will be sent to <span className="text-amber-400">{capturedEmail}</span>.
+                                Check your email shortly. You can close this window.
+                                {capturedEmail && (<><br/>Sending to <span className="text-amber-400">{capturedEmail}</span>.</>)}
+                            </p>
+                        </div>
+                    )}
+                    {callState === 'ended' && !showPricing && !showEarlyCapture && !isProcessingReport && (
+                        <div className="text-center px-4">
+                            <h2 className="text-2xl md:text-3xl font-light text-white mb-3 tracking-tight">
+                                Beautiful work.
+                            </h2>
+                            <p className="text-slate-400 text-base leading-relaxed max-w-md mx-auto">
+                                Your Invisible Rule has been mapped. In a moment we will show you how to receive it.
                             </p>
                         </div>
                     )}
@@ -834,7 +840,7 @@ export default function VoiceInterface() {
                             </div>
                             <h2 className="text-2xl font-light text-white mb-2">Where should we send your report?</h2>
                             <p className="text-slate-400 leading-relaxed">
-                                Enter your name and email so we can deliver your personalized Deep Dive (report, podcast, video, and slides) to your inbox after the session.
+                                Enter your first name and email so we can send your personalized report.
                             </p>
                         </div>
 
