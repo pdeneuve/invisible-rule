@@ -523,9 +523,9 @@ export default function VoiceInterface() {
 
     if (!hasStarted) {
         return (
-            <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 flex items-center justify-center px-4">
-                <div className="max-w-xl w-full text-center">
-                    <div className="relative inline-flex items-center justify-center mb-10">
+            <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 flex items-center justify-center px-4 py-12">
+                <div className="max-w-2xl w-full text-center">
+                    <div className="relative inline-flex items-center justify-center mb-8">
                         <div
                             className="w-24 h-24 rounded-full flex items-center justify-center"
                             style={{
@@ -540,19 +540,19 @@ export default function VoiceInterface() {
                     </div>
 
                     <h1 className="text-4xl font-light text-white mb-3 tracking-tight">The Invisible Rule</h1>
-                    <p className="text-xl text-slate-400 mb-2">You keep starting over. But nothing changes.</p>
-                    <p className="text-slate-500 mb-10 leading-relaxed max-w-md mx-auto">
-                        A belief you have carried most of your life is still making your choices for you. And you have no idea it is there. This is your Invisible Rule.
+                    <p className="text-xl text-amber-300/90 mb-3">Your unconscious operating system — made visible.</p>
+                    <p className="text-slate-400 mb-10 leading-relaxed max-w-lg mx-auto">
+                        A guided voice conversation to find the survival strategy formed in childhood that now runs your adult life on autopilot.
                     </p>
 
                     <div className="bg-slate-800/60 border border-slate-700/50 backdrop-blur-sm rounded-2xl p-8 mb-8 text-left">
                         <h3 className="text-white font-medium mb-5 text-sm uppercase tracking-widest text-center">What to expect</h3>
                         <ul className="space-y-4">
                             {[
-                                ['\uD83C\uDFA4\uFE0F', 'A guided voice conversation - one question at a time'],
-                                ['\u23F1\uFE0F', '30 to 60 minutes to complete the full process'],
-                                ['\uD83D\uDCC4', 'A Deep Dive Report - delivered to your email'],
-                                ['\uD83D\uDD12', 'Private, confidential, and judgment-free'],
+                                ['🎤️', 'A guided voice conversation - one question at a time'],
+                                ['⏱️', '30 to 60 minutes to complete the full process'],
+                                ['📄', 'You will have an opportunity to get a personalized report with details about Your Invisible Rule'],
+                                ['🔒', 'Private, confidential, and judgment-free'],
                             ].map(([icon, text]) => (
                                 <li key={text} className="flex items-start gap-3 text-slate-300">
                                     <span className="text-lg leading-none mt-0.5">{icon}</span>
@@ -584,6 +584,42 @@ export default function VoiceInterface() {
                     >
                         Begin Voice Session
                     </button>
+
+                    {/* REAL PEOPLE. REAL SHIFTS. */}
+                    <div className="mt-16 mb-10">
+                        <p className="text-amber-400 text-xs font-bold uppercase tracking-[0.2em] mb-2">REAL PEOPLE. REAL SHIFTS.</p>
+                        <p className="text-slate-400 text-base">Hear what happened when others met their Invisible Rule.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10 text-left">
+                        {[
+                            'It felt like Pamela was in the room with me',
+                            'I went from Skeptic to Believer',
+                            'I finally broke my patterns',
+                            'The Invisible Rule that changed my confidence forever',
+                        ].map((quote, i) => (
+                            <div
+                                key={i}
+                                className="bg-gradient-to-br from-slate-800/70 to-slate-900/70 border border-amber-500/20 rounded-2xl p-6"
+                            >
+                                <svg className="w-6 h-6 text-amber-400/70 mb-3" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M9.983 3v7.391c0 5.704-3.731 9.57-8.983 10.609l-.995-2.151c2.432-.917 3.995-3.638 3.995-5.849h-4v-10h9.983zm14.017 0v7.391c0 5.704-3.748 9.571-9 10.609l-.996-2.151c2.433-.917 3.996-3.638 3.996-5.849h-3.983v-10h9.983z" />
+                                </svg>
+                                <p className="text-slate-200 text-[15px] leading-relaxed italic">&ldquo;{quote}&rdquo;</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    <button
+                        onClick={handleBeginClick}
+                        className="w-full py-5 px-8 rounded-2xl text-slate-900 font-semibold text-lg transition-all duration-300 hover:scale-105 active:scale-95"
+                        style={{
+                            background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
+                            boxShadow: '0 8px 32px rgba(245, 158, 11, 0.3)',
+                        }}
+                    >
+                        Begin Voice Session
+                    </button>
+
                     <p className="text-slate-600 text-xs mt-5 leading-relaxed">
                         Make sure your microphone is enabled. This is pattern-mapping work, not therapy.<br />
                         If you are in crisis, please contact a mental health professional.
