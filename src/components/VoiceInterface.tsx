@@ -62,6 +62,7 @@ export default function VoiceInterface() {
     const callStartTimeRef = useRef<number | null>(null);
     const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const hasSubmittedRef = useRef(false);
+    const emailCapturedRef = useRef(false);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -131,17 +132,13 @@ export default function VoiceInterface() {
     }, []);
 
     const checkForCapturePrompt = useCallback((text: string) => {
+        if (emailCapturedRef.current) return;
         const lower = text.toLowerCase();
         const promptPatterns = [
             /\bname\b.{0,40}\bemail\b/i,
             /\bemail\b.{0,40}\bname\b/i,
-            /to send you/i,
-            /send (?:you )?your /i,
-            /where (?:should|would) (?:i|we) send/i,
-            /receive your (?:report|deep dive|first light)/i,
-            /deliver your /i,
+            /where (?:should|would) (?:i|we) (?:reach|contact)/i,
             /before we wrap up/i,
-            /your guide will send/i,
             /on the screen/i,
             /a box (?:will|is)/i,
             /a (?:form|screen) (?:will|is)/i,
@@ -359,6 +356,7 @@ export default function VoiceInterface() {
         }
 
         hasSubmittedRef.current = false;
+        emailCapturedRef.current = false;
         setIsProcessingReport(false);
 
         setHasStarted(true);
@@ -421,7 +419,7 @@ export default function VoiceInterface() {
                 setTranscript(prev => [...prev, { role, text, timestamp: new Date() }]);
                 if (role === 'assistant') {
                     detectPhase(text);
-                    if (!emailCaptured) {
+                    if (!emailCapturedRef.current) {
                         checkForCapturePrompt(text);
                     }
                 }
@@ -495,6 +493,7 @@ export default function VoiceInterface() {
         setCapturedFirstName(fn);
         setCapturedEmail(em);
         setEmailCaptured(true);
+        emailCapturedRef.current = true;
 
         if (typeof window !== 'undefined') {
             localStorage.setItem('captured_email', em);
@@ -518,27 +517,25 @@ export default function VoiceInterface() {
             console.warn('mid-session submit-lead failed:', err);
         }
 
-        // Tell VAPI the user has submitted, then make the assistant speak
-        // out loud so the user knows it heard them and the conversation
-        // continues. We try multiple SDK methods because different VAPI
-        // versions expose different APIs.
+        // Tell VAPI the user has submitted, then have the assistant briefly
+        // acknowledge and continue. The acknowledgement text must NOT contain
+        // phrases like "send your report" or "your email" because those
+        // re-trigger the capture-prompt regex and re-open the form.
         if (vapiRef.current) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const v = vapiRef.current as any;
-            const ackText = `Thank you, ${fn}. I will send your report to ${em} after we finish. Let's keep going.`;
-            // 1) Inject system context so the model knows the user provided info
+            const ackText = `Got it, ${fn}. After we finish, you'll choose which report you want. Let's keep going.`;
             try {
                 if (typeof v.send === 'function') {
                     v.send({
                         type: 'add-message',
                         message: {
                             role: 'system',
-                            content: `The user just submitted their first name (${fn}) and email (${em}) via the on-screen form. Their report will be sent to that email after the session. Continue with the next question.`,
+                            content: `The user submitted their first name (${fn}) and contact info via the on-screen form. After the session ends, they will choose which report tier they want (First Light $7 or Deep Dive $97). Do NOT promise to send a report. Just briefly acknowledge by first name and continue with the next question.`,
                         },
                     });
                 }
             } catch (err) { console.warn('add-message failed:', err); }
-            // 2) Make the assistant actually SAY the acknowledgement out loud
             try {
                 if (typeof v.say === 'function') {
                     v.say(ackText, false);
@@ -846,9 +843,9 @@ export default function VoiceInterface() {
                         <button
                             onClick={() => setShowEarlyCapture(true)}
                             className="px-5 h-14 rounded-full bg-amber-500 hover:bg-amber-400 flex items-center justify-center transition-all hover:scale-105 active:scale-95 text-slate-900 font-semibold text-sm shadow-lg"
-                            title="Enter your name and email to receive the report"
+                            title="Enter your name and email so you can choose your report after we finish"
                         >
-                            Send me my report
+                            Save my contact info
                         </button>
                     )}
                     {emailCaptured && (
@@ -880,9 +877,9 @@ export default function VoiceInterface() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 11-8 0 4 4 0 018 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
                                 </svg>
                             </div>
-                            <h2 className="text-2xl font-light text-white mb-2">Where should we send your report?</h2>
+                            <h2 className="text-2xl font-light text-white mb-2">Almost there — let&apos;s get your contact info.</h2>
                             <p className="text-slate-400 leading-relaxed">
-                                Enter your first name and email so we can send your personalized report.
+                                Enter your first name and email. After we finish, you&apos;ll choose which report you want.
                             </p>
                         </div>
 
@@ -915,7 +912,7 @@ export default function VoiceInterface() {
                                 disabled={earlySubmitting}
                                 className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-900 font-semibold py-4 rounded-xl transition-all duration-200 hover:scale-105 disabled:hover:scale-100"
                             >
-                                {earlySubmitting ? 'Sending...' : 'Send my report'}
+                                {earlySubmitting ? 'Saving...' : 'Save and continue'}
                             </button>
                             <p className="text-center text-slate-500 text-xs">
                                 No spam. No selling your data.
