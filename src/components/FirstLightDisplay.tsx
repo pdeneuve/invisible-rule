@@ -99,24 +99,7 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
 
   const handleGetDeepDive = async () => {
     setSubmitting(true);
-    // Auto-apply coupon if the user typed a valid code but did not click Apply.
-    let effectiveCoupon = couponApplied ? coupon.trim().toUpperCase() : '';
-    if (!effectiveCoupon) {
-      const typed = coupon.trim().toUpperCase();
-      if (typed && VALID_COUPONS.includes(typed)) {
-        effectiveCoupon = typed;
-        setCouponApplied(true);
-        setCoupon(typed);
-      }
-    }
-    if (effectiveCoupon) {
-      // Just redirect to /thank-you with the coupon. The thank-you page
-      // will trigger fulfillment from a stable page so the server has time
-      // to actually finish (audio + slides + video + email take ~2 min).
-      window.location.href = `/thank-you?tier=2&coupon=${encodeURIComponent(effectiveCoupon)}`;
-      return;
-    }
-    // No coupon: go straight to Stripe Checkout (not GHL)
+    // Go straight to Stripe Checkout. VIPs can apply their coupon there.
     try {
       const leadData = localStorage.getItem('bop_lead_data');
       const parsedLead = leadData ? JSON.parse(leadData) : null;
@@ -268,46 +251,11 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
             }}
           >
             <div className="flex items-end gap-2 justify-center mb-2">
-              {couponApplied ? (
-                <>
-                  <span className="text-4xl font-light text-white">FREE</span>
-                  <span className="text-slate-500 line-through text-lg mb-1">$97</span>
-                </>
-              ) : (
-                <>
-                  <span className="text-4xl font-light text-white">$97</span>
-                </>
-              )}
+              <span className="text-4xl font-light text-white">$97</span>
             </div>
             <p className="text-center text-slate-400 text-sm mb-6">
               Hear it. Read it. Feel it. Share it.
             </p>
-
-            <div className="mb-4">
-              <label className="block text-slate-400 text-xs uppercase tracking-wider mb-2">
-                Have a coupon code?
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={coupon}
-                  onChange={e => { setCoupon(e.target.value); setCouponError(''); setCouponApplied(false); }}
-                  placeholder="Enter code"
-                  className="flex-1 bg-slate-800 text-white placeholder-slate-500 border border-slate-700 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition-colors uppercase"
-                  disabled={couponApplied || submitting}
-                />
-                <button
-                  type="button"
-                  onClick={handleApplyCoupon}
-                  disabled={couponApplied || submitting}
-                  className="px-4 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-colors disabled:opacity-60"
-                >
-                  {couponApplied ? '✓ Applied' : 'Apply'}
-                </button>
-              </div>
-              {couponError && <p className="text-red-400 text-xs mt-2">{couponError}</p>}
-              {couponApplied && <p className="text-emerald-400 text-xs mt-2">Coupon applied — The Deep Dive is free for you.</p>}
-            </div>
 
             <button
               onClick={handleGetDeepDive}
@@ -318,14 +266,13 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
                 boxShadow: '0 8px 32px rgba(245, 158, 11, 0.25)',
               }}
             >
-              {submitting
-                ? 'Loading...'
-                : couponApplied
-                  ? 'Send my Deep Dive'
-                  : 'Get The Deep Dive — $97'}
+              {submitting ? 'Loading...' : 'Get The Deep Dive — $97'}
             </button>
             <p className="text-center text-slate-500 text-xs mt-4">
               Secure payment. Instant delivery. No subscriptions.
+            </p>
+            <p className="text-center text-slate-500 text-xs mt-1">
+              Have a coupon? Enter it on the next page.
             </p>
           </div>
         </div>
