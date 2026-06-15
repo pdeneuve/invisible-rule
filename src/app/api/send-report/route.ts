@@ -73,7 +73,9 @@ export async function POST(req: NextRequest) {
   if (tier === 1 || tier == null) {
     const bop = report.bopStatement || report.invisibleRule || '';
     const context = report.context || report.originContext || '';
-    const upgradeUrl = process.env.NEXT_PUBLIC_GHL_URL_TIER2 || 'https://invisible-rule.vercel.app/?mode=paid';
+    const appBase = process.env.NEXT_PUBLIC_APP_URL || 'https://theinvisiblerule.com';
+    // Direct-to-Stripe Deep Dive upgrade. Never link to GHL from email.
+    const upgradeUrl = `${appBase}/api/upgrade-deep-dive?email=${encodeURIComponent(email)}&firstName=${encodeURIComponent(name)}`;
 
     const html = wrap(`
       ${header('First Light Report')}
