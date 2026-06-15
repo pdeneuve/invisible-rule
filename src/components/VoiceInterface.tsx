@@ -312,17 +312,31 @@ export default function VoiceInterface() {
             } else if (tier === 1 && coupon) {
                 // Coupon applied — skip payment funnel, go straight to processing
                 window.location.href = `/processing?tier=1&free=1&coupon=${encodeURIComponent(coupon)}`;
+            } else if (tier === 1) {
+                // No coupon: go straight to Stripe Checkout for First Light ($7).
+                // Never fall through to GHL.
+                try {
+                    const r = await fetch('/api/create-stripe-checkout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ firstName, email, tier: 1 }),
+                    });
+                    const json = await r.json();
+                    if (r.ok && json.url) {
+                        window.location.href = json.url;
+                    } else {
+                        console.error('Stripe checkout (tier 1) failed:', json);
+                        // Fallback: show First Light page so the user is not stranded.
+                        window.location.href = '/processing?tier=1';
+                    }
+                } catch (err) {
+                    console.error('Stripe checkout (tier 1) error:', err);
+                    window.location.href = '/processing?tier=1';
+                }
             } else {
-                const GHL_URLS: Record<number, string> = {
-                    1: process.env.NEXT_PUBLIC_GHL_URL_TIER1 || '/processing?tier=1',
-                    2: process.env.NEXT_PUBLIC_GHL_URL_TIER2 || '/processing?tier=2',
-                    3: process.env.NEXT_PUBLIC_GHL_URL_TIER3 || '/mastery',
-                };
-                const baseUrl = GHL_URLS[tier] || '/report';
-                const finalUrl = tier === 3
-                  ? baseUrl + '?name=' + encodeURIComponent(capturedFirstName || '') + '&email=' + encodeURIComponent(capturedEmail || '')
-                  : baseUrl;
-                window.location.href = finalUrl;
+                // Tier 2 paid: Stripe Checkout (handled elsewhere). Fallback to
+                // /processing if anyone reaches this path.
+                window.location.href = '/processing?tier=2';
             }
         }
     }, [transcript, sessionId, selectedTier, freeToken, capturedFirstName, capturedEmail]);
