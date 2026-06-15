@@ -99,7 +99,20 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
 
   const handleGetDeepDive = async () => {
     setSubmitting(true);
-    // Go straight to Stripe Checkout. VIPs can apply their coupon there.
+    // First check: did they type a valid in-app coupon? If yes, use it
+    // directly (skip Stripe entirely). Stripe's promo codes have been flaky;
+    // the in-app coupon path is confirmed working.
+    const typed = coupon.trim().toUpperCase();
+    if (typed) {
+      if (VALID_COUPONS.includes(typed)) {
+        window.location.href = `/thank-you?tier=2&coupon=${encodeURIComponent(typed)}`;
+        return;
+      }
+      setCouponError('That code is not recognized. Leave blank to checkout.');
+      setSubmitting(false);
+      return;
+    }
+    // No coupon typed -> Stripe Checkout
     try {
       const leadData = localStorage.getItem('bop_lead_data');
       const parsedLead = leadData ? JSON.parse(leadData) : null;
@@ -257,6 +270,18 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
               Hear it. Read it. Feel it. Share it.
             </p>
 
+            <div className="mb-3">
+              <input
+                type="text"
+                value={coupon}
+                onChange={e => { setCoupon(e.target.value); setCouponError(''); }}
+                placeholder="Have a coupon? Enter it here"
+                className="w-full bg-slate-800 text-white placeholder-slate-500 border border-slate-700 rounded-lg px-4 py-3 text-sm text-center focus:outline-none focus:border-amber-500 transition-colors uppercase"
+                disabled={submitting}
+              />
+              {couponError && <p className="text-red-400 text-xs mt-2 text-center">{couponError}</p>}
+            </div>
+
             <button
               onClick={handleGetDeepDive}
               disabled={submitting}
@@ -266,13 +291,10 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
                 boxShadow: '0 8px 32px rgba(245, 158, 11, 0.25)',
               }}
             >
-              {submitting ? 'Loading...' : 'Get The Deep Dive — $97'}
+              {submitting ? 'Loading...' : 'Get The Deep Dive'}
             </button>
             <p className="text-center text-slate-500 text-xs mt-4">
-              Secure payment. Instant delivery. No subscriptions.
-            </p>
-            <p className="text-center text-slate-500 text-xs mt-1">
-              Have a coupon? Enter it on the next page.
+              No coupon? You will be taken to secure Stripe checkout for $97.
             </p>
           </div>
         </div>
