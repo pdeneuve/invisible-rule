@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
       sessionId: data.sessionId || '',
       transcript: data.transcript || '',
       report: data.report || null,
+      sessionState: data.sessionState ?? undefined,
       createdAt: data.createdAt || new Date().toISOString(),
     };
     await saveSession(session);

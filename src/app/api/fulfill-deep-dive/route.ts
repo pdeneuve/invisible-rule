@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { put } from '@vercel/blob';
+import { getSession } from '@/lib/session-store';
 
 export const maxDuration = 300;
 
@@ -158,21 +159,42 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!email || !report) {
-      return NextResponse.json({ error: 'Missing email or report' }, { status: 400 });
+    if (!email) {
+      return NextResponse.json({ error: 'Missing email' }, { status: 400 });
     }
 
-    // If the caller passed the original session AND the report we have is a
-    // First Light shape (lacks the 12-section Deep Dive keys), regenerate
-    // the report as a Deep Dive that EXPANDS the First Light Invisible Rule.
+    // Server-side recovery: if the browser dropped the report or session
+    // (Stripe redirect, fresh tab, cleared localStorage), look the session
+    // up by email from our server store and use that as the source of truth.
+    let sessionState = body.sessionState;
+    if (!report || Object.keys(report).length === 0 || !sessionState) {
+      const stored = await getSession(email);
+      if (stored) {
+        if (!report || Object.keys(report).length === 0) {
+          report = (stored.report as Record<string, string>) || {};
+        }
+        if (!sessionState) {
+          sessionState = stored.sessionState;
+        }
+        console.log('Recovered session from server store for', email);
+      }
+    }
+
+    if (!report || Object.keys(report).length === 0) {
+      return NextResponse.json({ error: 'Missing report and no stored session found' }, { status: 400 });
+    }
+
+    // If the report we have is a First Light shape (lacks the 12-section
+    // Deep Dive keys), regenerate it as a Deep Dive that EXPANDS the First
+    // Light Invisible Rule.
     const looksLikeFirstLight = !report.fullBopHypothesis && !!report.invisibleRule;
-    if (body.sessionState && looksLikeFirstLight) {
+    if (sessionState && looksLikeFirstLight) {
       try {
         const regenRes = await fetch(`${appUrl()}/api/generate-report`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            sessionState: body.sessionState,
+            sessionState,
             tier: 2,
             firstLightAnchor: {
               invisibleRule: report.invisibleRule,

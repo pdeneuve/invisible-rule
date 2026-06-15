@@ -263,6 +263,7 @@ export default function VoiceInterface() {
                         sessionId,
                         transcript: transcriptText,
                         report,
+                        sessionState: sessionStateForReport,
                         createdAt: new Date().toISOString(),
                     }),
                 });

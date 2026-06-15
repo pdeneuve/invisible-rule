@@ -7,6 +7,7 @@ export interface StoredSession {
   sessionId: string;
   transcript: string;
   report: Record<string, string> | null;
+  sessionState?: unknown;
   createdAt: string;
 }
 
