@@ -261,6 +261,21 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Last-resort defense: if regeneration did not happen (or failed silently)
+    // and we still only have a First Light report, copy First Light content
+    // into the Deep Dive Version B keys so the email is never empty.
+    if (!report.fullBopHypothesis && report.invisibleRule) {
+      console.warn('Falling back to First Light content for Deep Dive email');
+      const fl = report.invisibleRule;
+      const insight = report.coreInsight || '';
+      report.fullBopHypothesis = fl;
+      report.bopStatement = report.bopStatement || fl;
+      report.originContext = report.originContext || insight;
+      report.payoffAndCost = report.payoffAndCost || insight;
+      report.newOperatingPrinciple = report.newOperatingPrinciple || insight;
+      report.integrationAndIdentity = report.integrationAndIdentity || insight;
+    }
+
     const [audioUrl, videoRenderId, slidesUrl] = await Promise.all([
       generateAndUploadAudio(report, firstName),
       submitVideoRender(report, firstName),
