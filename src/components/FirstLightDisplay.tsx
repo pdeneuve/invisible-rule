@@ -99,11 +99,21 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
 
   const handleGetDeepDive = async () => {
     setSubmitting(true);
-    if (couponApplied) {
+    // Auto-apply coupon if the user typed a valid code but did not click Apply.
+    let effectiveCoupon = couponApplied ? coupon.trim().toUpperCase() : '';
+    if (!effectiveCoupon) {
+      const typed = coupon.trim().toUpperCase();
+      if (typed && VALID_COUPONS.includes(typed)) {
+        effectiveCoupon = typed;
+        setCouponApplied(true);
+        setCoupon(typed);
+      }
+    }
+    if (effectiveCoupon) {
       // Just redirect to /thank-you with the coupon. The thank-you page
       // will trigger fulfillment from a stable page so the server has time
       // to actually finish (audio + slides + video + email take ~2 min).
-      window.location.href = `/thank-you?tier=2&coupon=${encodeURIComponent(coupon.trim().toUpperCase())}`;
+      window.location.href = `/thank-you?tier=2&coupon=${encodeURIComponent(effectiveCoupon)}`;
       return;
     }
     // No coupon: go straight to Stripe Checkout (not GHL)

@@ -32,7 +32,17 @@ export default function PricingScreen({ onSelectTier }: Props) {
 
   const handleContinue = () => {
     setSubmitting(true);
-    onSelectTier(1, couponApplied ? coupon.trim().toUpperCase() : undefined);
+    // Auto-apply coupon if the user typed a valid code but did not click Apply.
+    let effectiveCoupon = couponApplied ? coupon.trim().toUpperCase() : '';
+    if (!effectiveCoupon) {
+      const typed = coupon.trim().toUpperCase();
+      if (typed && VALID_COUPONS.includes(typed)) {
+        effectiveCoupon = typed;
+        setCouponApplied(true);
+        setCoupon(typed);
+      }
+    }
+    onSelectTier(1, effectiveCoupon || undefined);
   };
 
   return (
