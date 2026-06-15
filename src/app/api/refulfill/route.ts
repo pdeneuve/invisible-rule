@@ -45,8 +45,11 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Fire fulfill-deep-dive synchronously so we can return its actual status.
-  const res = await fetch(`${baseUrl}/api/fulfill-deep-dive`, {
+  // Fire fulfill-deep-dive in the background. fulfill-deep-dive gets its
+  // own 5-minute Vercel budget once it starts, so it does not need this
+  // request to stay alive. Return immediately so the browser does not
+  // hang for minutes.
+  fetch(`${baseUrl}/api/fulfill-deep-dive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -56,16 +59,13 @@ export async function GET(req: NextRequest) {
       sessionState: stored.sessionState,
       internalSecret,
     }),
-  });
-
-  const json = await res.json().catch(() => null);
+  }).catch(err => console.error('background fulfill kick failed:', err));
 
   return NextResponse.json({
     triggeredFor: email,
     storedSessionFound: true,
     storedReportHasInvisibleRule: !!(stored.report as Record<string, string> | null)?.invisibleRule,
     storedSessionStateHasMessages: !!(stored.sessionState as { messages?: unknown[] } | undefined)?.messages?.length,
-    fulfillStatus: res.status,
-    fulfillBody: json,
+    status: 'fulfillment triggered in background — check email in 2-3 minutes',
   });
 }
