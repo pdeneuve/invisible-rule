@@ -130,9 +130,10 @@ async function submitVideoRender(
   firstName: string
 ): Promise<string | null> {
   try {
-    // Aggressive timeout: video has been hanging Vercel cross-function calls
-    // past 60s and blocking the entire pipeline. If it does not respond in
-    // 55s, we abandon it and ship the rest of the Deep Dive.
+    // Video render needs time to generate 8 ElevenLabs narration clips
+    // before submitting to Creatomate. Allow up to 180s. The regenerate
+    // step runs in parallel at up to 240s, so this does not extend the
+    // overall pipeline.
     const res = await fetchWithTimeout(
       `${appUrl()}/api/generate-video`,
       {
@@ -140,7 +141,7 @@ async function submitVideoRender(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ report, firstName }),
       },
-      55_000
+      180_000
     );
     if (!res || !res.ok) {
       console.error('generate-video failed:', res?.status, res ? await res.text() : 'timeout');
