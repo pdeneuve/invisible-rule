@@ -243,7 +243,7 @@ export async function POST(req: NextRequest) {
               coreInsight: report.coreInsight,
             },
           }),
-        }, 90_000);
+        }, 240_000); // 4 minutes — Deep Dive prompt + Anthropic can take a while
         if (regenRes && regenRes.ok) {
           const json = await regenRes.json();
           if (json?.report) {
