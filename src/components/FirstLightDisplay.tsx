@@ -100,33 +100,9 @@ export default function FirstLightDisplay({ report, firstName }: Props) {
   const handleGetDeepDive = async () => {
     setSubmitting(true);
     if (couponApplied) {
-      // Free fulfillment: trigger Deep Dive build and route to thank-you.
-      // Pass sessionState so the server can regenerate as a real Deep Dive
-      // report (tier=2) before building the audio/slides/video.
-      try {
-        const reportData = localStorage.getItem('bop_report_a');
-        const leadData = localStorage.getItem('bop_lead_data');
-        const sessionStateData = localStorage.getItem('bop_session_state');
-        const parsedReport = reportData ? JSON.parse(reportData) : null;
-        const parsedLead = leadData ? JSON.parse(leadData) : null;
-        const parsedSessionState = sessionStateData ? JSON.parse(sessionStateData) : null;
-        if (parsedLead?.email && parsedReport) {
-          fetch('/api/fulfill-deep-dive', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              firstName: parsedLead.firstName,
-              email: parsedLead.email,
-              report: parsedReport,
-              sessionState: parsedSessionState,
-              coupon: coupon.trim().toUpperCase(),
-            }),
-            keepalive: true,
-          });
-        }
-      } catch (err) {
-        console.warn('Deep Dive fulfillment trigger failed:', err);
-      }
+      // Just redirect to /thank-you with the coupon. The thank-you page
+      // will trigger fulfillment from a stable page so the server has time
+      // to actually finish (audio + slides + video + email take ~2 min).
       window.location.href = `/thank-you?tier=2&coupon=${encodeURIComponent(coupon.trim().toUpperCase())}`;
       return;
     }

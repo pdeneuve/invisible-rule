@@ -7,40 +7,88 @@ const THANK_YOU_VIDEO_ID = '1YdfL-JEKAkAbw3nl0MDSinB6fzQYOqIn';
 
 export default function ThankYouContent() {
   const [firstName, setFirstName] = useState('');
+  const [triggerStatus, setTriggerStatus] = useState<'idle' | 'triggering' | 'sent' | 'error'>('idle');
+  const [triggerDetail, setTriggerDetail] = useState('');
   const searchParams = useSearchParams();
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     let leadFirstName = '';
+    let leadEmail = '';
+    let parsedReport: Record<string, string> | null = null;
+    let parsedSessionState: unknown = null;
     try {
       const leadData = localStorage.getItem('bop_lead_data');
       if (leadData) {
-        leadFirstName = JSON.parse(leadData).firstName || '';
+        const parsed = JSON.parse(leadData);
+        leadFirstName = parsed.firstName || '';
+        leadEmail = parsed.email || '';
         setFirstName(leadFirstName);
       }
+      const reportData = localStorage.getItem('bop_report_a');
+      if (reportData) parsedReport = JSON.parse(reportData);
+      const sessionStateData = localStorage.getItem('bop_session_state');
+      if (sessionStateData) parsedSessionState = JSON.parse(sessionStateData);
     } catch { /* ignore */ }
 
-    // If we arrived from Stripe Checkout, verify the payment and trigger
-    // Deep Dive fulfillment server-side.
+    const coupon = searchParams.get('coupon');
     const stripeSessionId = searchParams.get('stripe_session_id');
+
+    // Coupon path: trigger Deep Dive fulfillment directly from this stable page.
+    if (coupon) {
+      setTriggerStatus('triggering');
+      fetch('/api/fulfill-deep-dive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: leadFirstName,
+          email: leadEmail,
+          report: parsedReport || {},
+          sessionState: parsedSessionState,
+          coupon,
+        }),
+      })
+        .then(async r => {
+          if (r.ok) {
+            setTriggerStatus('sent');
+          } else {
+            const body = await r.text();
+            setTriggerStatus('error');
+            setTriggerDetail(`Server ${r.status}: ${body}`);
+          }
+        })
+        .catch(err => {
+          setTriggerStatus('error');
+          setTriggerDetail(String(err));
+        });
+      return;
+    }
+
+    // Stripe path: verify the Stripe session then trigger fulfillment.
     if (stripeSessionId) {
-      try {
-        const reportData = localStorage.getItem('bop_report_a');
-        const sessionStateData = localStorage.getItem('bop_session_state');
-        const parsedReport = reportData ? JSON.parse(reportData) : null;
-        const parsedSessionState = sessionStateData ? JSON.parse(sessionStateData) : null;
-        fetch('/api/verify-stripe-payment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: stripeSessionId,
-            report: parsedReport,
-            sessionState: parsedSessionState,
-          }),
-        }).catch(err => console.warn('verify-stripe-payment failed:', err));
-      } catch (err) {
-        console.warn('Could not trigger Stripe verification:', err);
-      }
+      setTriggerStatus('triggering');
+      fetch('/api/verify-stripe-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: stripeSessionId,
+          report: parsedReport,
+          sessionState: parsedSessionState,
+        }),
+      })
+        .then(async r => {
+          if (r.ok) {
+            setTriggerStatus('sent');
+          } else {
+            const body = await r.text();
+            setTriggerStatus('error');
+            setTriggerDetail(`Server ${r.status}: ${body}`);
+          }
+        })
+        .catch(err => {
+          setTriggerStatus('error');
+          setTriggerDetail(String(err));
+        });
     }
   }, [searchParams]);
 
@@ -89,6 +137,18 @@ export default function ThankYouContent() {
             Watch the video above while we build your assets. Everything will arrive
             in your inbox within a few minutes.
           </p>
+          {triggerStatus === 'triggering' && (
+            <p className="text-amber-400 text-xs mt-3">Building your Deep Dive… this takes 2–3 minutes.</p>
+          )}
+          {triggerStatus === 'sent' && (
+            <p className="text-emerald-400 text-xs mt-3">✓ Deep Dive request received. Email arriving shortly.</p>
+          )}
+          {triggerStatus === 'error' && (
+            <div className="mt-3 text-left">
+              <p className="text-red-400 text-xs mb-1">Something went wrong starting the build.</p>
+              <p className="text-slate-500 text-xs font-mono">{triggerDetail}</p>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-center mt-8">
