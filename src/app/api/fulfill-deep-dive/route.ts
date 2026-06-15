@@ -39,18 +39,45 @@ function appUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL || 'https://invisible-rule.vercel.app';
 }
 
+/**
+ * fetch with an explicit timeout. Without this, a hanging upstream call
+ * can keep fulfill-deep-dive blocked until it hits its 5-minute function
+ * timeout, and the email never gets sent. Returns null if the call hangs
+ * past `ms`.
+ */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  ms: number
+): Promise<Response | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    console.error(`fetchWithTimeout aborted/failed for ${url} after ${ms}ms:`, err);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function generateAndUploadAudio(
   report: Record<string, string>,
   firstName: string
 ): Promise<string | null> {
   try {
-    const res = await fetch(`${appUrl()}/api/generate-audio`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ report, firstName }),
-    });
-    if (!res.ok) {
-      console.error('generate-audio failed:', res.status, await res.text());
+    const res = await fetchWithTimeout(
+      `${appUrl()}/api/generate-audio`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ report, firstName }),
+      },
+      120_000
+    );
+    if (!res || !res.ok) {
+      console.error('generate-audio failed:', res?.status, res ? await res.text() : 'timeout');
       return null;
     }
     const buf = Buffer.from(await res.arrayBuffer());
@@ -71,13 +98,17 @@ async function generateAndUploadSlides(
   firstName: string
 ): Promise<string | null> {
   try {
-    const res = await fetch(`${appUrl()}/api/generate-slides`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ report, firstName }),
-    });
-    if (!res.ok) {
-      console.error('generate-slides failed:', res.status, await res.text());
+    const res = await fetchWithTimeout(
+      `${appUrl()}/api/generate-slides`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ report, firstName }),
+      },
+      90_000
+    );
+    if (!res || !res.ok) {
+      console.error('generate-slides failed:', res?.status, res ? await res.text() : 'timeout');
       return null;
     }
     const { slides } = await res.json();
@@ -99,13 +130,20 @@ async function submitVideoRender(
   firstName: string
 ): Promise<string | null> {
   try {
-    const res = await fetch(`${appUrl()}/api/generate-video`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ report, firstName }),
-    });
-    if (!res.ok) {
-      console.error('generate-video failed:', res.status, await res.text());
+    // Aggressive timeout: video has been hanging Vercel cross-function calls
+    // past 60s and blocking the entire pipeline. If it does not respond in
+    // 55s, we abandon it and ship the rest of the Deep Dive.
+    const res = await fetchWithTimeout(
+      `${appUrl()}/api/generate-video`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ report, firstName }),
+      },
+      55_000
+    );
+    if (!res || !res.ok) {
+      console.error('generate-video failed:', res?.status, res ? await res.text() : 'timeout');
       return null;
     }
     const data = await res.json();
@@ -125,21 +163,25 @@ async function sendEmail(
   slidesUrl: string | null
 ): Promise<boolean> {
   try {
-    const res = await fetch(`${appUrl()}/api/send-report`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        firstName,
-        email,
-        report,
-        tier: 2,
-        audioUrl: audioUrl || undefined,
-        videoUrl: videoUrl || undefined,
-        slidesUrl: slidesUrl || undefined,
-      }),
-    });
-    if (!res.ok) {
-      console.error('send-report failed:', res.status, await res.text());
+    const res = await fetchWithTimeout(
+      `${appUrl()}/api/send-report`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName,
+          email,
+          report,
+          tier: 2,
+          audioUrl: audioUrl || undefined,
+          videoUrl: videoUrl || undefined,
+          slidesUrl: slidesUrl || undefined,
+        }),
+      },
+      60_000
+    );
+    if (!res || !res.ok) {
+      console.error('send-report failed:', res?.status, res ? await res.text() : 'timeout');
       return false;
     }
     return true;
@@ -190,7 +232,7 @@ export async function POST(req: NextRequest) {
     const looksLikeFirstLight = !report.fullBopHypothesis && !!report.invisibleRule;
     if (sessionState && looksLikeFirstLight) {
       try {
-        const regenRes = await fetch(`${appUrl()}/api/generate-report`, {
+        const regenRes = await fetchWithTimeout(`${appUrl()}/api/generate-report`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -201,16 +243,18 @@ export async function POST(req: NextRequest) {
               coreInsight: report.coreInsight,
             },
           }),
-        });
-        if (regenRes.ok) {
+        }, 90_000);
+        if (regenRes && regenRes.ok) {
           const json = await regenRes.json();
           if (json?.report) {
             report = json.report;
           } else {
             console.error('Deep Dive regenerate returned no report');
           }
-        } else {
+        } else if (regenRes) {
           console.error('Deep Dive regenerate failed:', regenRes.status, await regenRes.text());
+        } else {
+          console.error('Deep Dive regenerate timed out');
         }
       } catch (err) {
         console.error('Deep Dive regenerate error:', err);
