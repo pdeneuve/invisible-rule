@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { getSession } from '@/lib/session-store';
 
 /**
@@ -6,13 +7,45 @@ import { getSession } from '@/lib/session-store';
  * stored voice session looked up by email. Lets us iterate on the email
  * pipeline without running a new voice session every time.
  *
- * Usage:
- *   GET /api/refulfill?email=pdeneuve@gmail.com
+ * Auth: requires INTERNAL_FULFILL_SECRET as either X-Admin-Secret
+ * header OR ?secret= query param. Prevents random people from spending
+ * your paid API budget by triggering fulfillments for arbitrary emails.
  *
- * Returns a JSON status report showing what was triggered, plus
- * fires /api/fulfill-deep-dive in the background so the email arrives.
+ * Usage:
+ *   GET /api/refulfill?email=pdeneuve@gmail.com&secret=<INTERNAL_FULFILL_SECRET>
  */
+
+function secretMatches(provided: string, expected: string): boolean {
+  if (!provided || !expected) return false;
+  if (provided.length !== expected.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+
+function isAuthorizedAdmin(req: NextRequest): boolean {
+  const expected = process.env.INTERNAL_FULFILL_SECRET || '';
+  if (!expected) return false;
+  const header = req.headers.get('x-admin-secret') || '';
+  if (secretMatches(header, expected)) return true;
+  const qp = new URL(req.url).searchParams.get('secret') || '';
+  if (secretMatches(qp, expected)) return true;
+  return false;
+}
+
 export async function GET(req: NextRequest) {
+  if (!isAuthorizedAdmin(req)) {
+    return NextResponse.json(
+      {
+        error: 'Unauthorized. Provide admin secret.',
+        hint: 'Add ?secret=<INTERNAL_FULFILL_SECRET> to the URL. Get the value from Vercel env vars.',
+      },
+      { status: 401 }
+    );
+  }
+
   const url = new URL(req.url);
   const email = url.searchParams.get('email') || '';
 
