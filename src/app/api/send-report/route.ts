@@ -11,6 +11,55 @@ interface SendReportBody {
   slidesUrl?: string;
 }
 
+/**
+ * HTML-escape a string. Every user-provided value that gets
+ * interpolated into email HTML MUST pass through this first —
+ * otherwise an attacker can inject markup, links, or phishing
+ * content from our sending domain.
+ */
+function escapeHtml(input: string): string {
+  return String(input ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Sanitize a URL for use inside an <a href="..."> attribute.
+ * Only allow http, https, and mailto schemes so nobody can smuggle
+ * a javascript: or data: URL that would fire on click.
+ */
+function safeUrl(url: string): string {
+  const s = String(url ?? '').trim();
+  if (!s) return '#';
+  // eslint-disable-next-line no-useless-escape
+  if (!/^(https?:\/\/|mailto:)/i.test(s)) return '#';
+  return escapeHtml(s);
+}
+
+/**
+ * Basic email format check. Rejects anything with newlines
+ * (which could inject additional headers into the Resend call)
+ * and anything that clearly is not an email address.
+ */
+function isValidEmail(email: string): boolean {
+  if (typeof email !== 'string') return false;
+  if (/[\r\n]/.test(email)) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+/**
+ * Strip control characters from anything that goes into an email
+ * header (subject, from name) so it cannot inject its own header.
+ */
+function safeHeader(input: string, maxLen = 200): string {
+  return String(input ?? '')
+    .replace(/[\r\n\t]/g, ' ')
+    .slice(0, maxLen);
+}
+
 export async function POST(req: NextRequest) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -23,8 +72,15 @@ export async function POST(req: NextRequest) {
   if (!email || !report) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
+  if (!isValidEmail(email)) {
+    return NextResponse.json({ error: 'Invalid email' }, { status: 400 });
+  }
 
-  const name = firstName || 'Friend';
+  // Escape user-provided values ONCE up-front so nothing downstream
+  // has to remember to re-escape.
+  const safeName = escapeHtml(firstName || 'Friend');
+  const nameForHeader = safeHeader(firstName || 'Friend', 60);
+
   const fromAddress = process.env.RESEND_FROM_EMAIL || 'The Invisible Rule <pamela@theinvisiblerule.com>';
 
   const header = (tierLabel: string) => `
@@ -32,28 +88,28 @@ export async function POST(req: NextRequest) {
       <div style="width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 40% 40%,#fbbf24,#d97706);display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px;">
         <span style="color:#0f172a;font-weight:700;font-size:16px;">IR</span>
       </div>
-      <p style="color:#f59e0b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.15em;margin:0 0 8px;">${tierLabel}</p>
+      <p style="color:#f59e0b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.15em;margin:0 0 8px;">${escapeHtml(tierLabel)}</p>
     </div>
   `;
 
   const p = (text: string) => `<p style="color:#cbd5e1;font-size:15px;line-height:1.7;margin:0 0 16px;">${text}</p>`;
-  const h2 = (text: string) => `<h2 style="color:#f59e0b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;margin:0 0 8px;">${text}</h2>`;
+  const h2 = (text: string) => `<h2 style="color:#f59e0b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;margin:0 0 8px;">${escapeHtml(text)}</h2>`;
   const section = (title: string, content: string) => `
     <div style="background:rgba(15,23,42,0.7);border:1px solid rgba(51,65,85,0.8);border-radius:16px;padding:24px;margin-bottom:16px;">
       ${h2(title)}
-      <p style="color:#cbd5e1;font-size:14px;line-height:1.7;margin:0;white-space:pre-wrap;">${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+      <p style="color:#cbd5e1;font-size:14px;line-height:1.7;margin:0;white-space:pre-wrap;">${escapeHtml(content)}</p>
     </div>
   `;
 
   const btn = (url: string, label: string) => `
     <div style="text-align:center;margin:32px 0;">
-      <a href="${url}" style="display:inline-block;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#0f172a;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;text-decoration:none;">${label}</a>
+      <a href="${safeUrl(url)}" style="display:inline-block;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#0f172a;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;text-decoration:none;">${escapeHtml(label)}</a>
     </div>
   `;
 
   const sig = (line: string) => `
     <div style="border-top:1px solid rgba(51,65,85,0.5);margin-top:32px;padding-top:24px;">
-      <p style="color:#64748b;font-size:13px;line-height:1.6;margin:0;">${line}</p>
+      <p style="color:#64748b;font-size:13px;line-height:1.6;margin:0;">${escapeHtml(line)}</p>
       <p style="color:#64748b;font-size:13px;margin:8px 0 0;">-- Pamela Deneuve<br>The Invisible Rule</p>
     </div>
   `;
@@ -75,17 +131,17 @@ export async function POST(req: NextRequest) {
     const context = report.context || report.originContext || '';
     const appBase = process.env.NEXT_PUBLIC_APP_URL || 'https://theinvisiblerule.com';
     // Direct-to-Stripe Deep Dive upgrade. Never link to GHL from email.
-    const upgradeUrl = `${appBase}/api/upgrade-deep-dive?email=${encodeURIComponent(email)}&firstName=${encodeURIComponent(name)}`;
+    const upgradeUrl = `${appBase}/api/upgrade-deep-dive?email=${encodeURIComponent(email)}&firstName=${encodeURIComponent(firstName || '')}`;
 
     const html = wrap(`
       ${header('First Light Report')}
-      <h1 style="color:#ffffff;font-size:28px;font-weight:300;text-align:center;margin:0 0 8px;">${name}, here is your Invisible Rule.</h1>
-      <p style="color:#64748b;font-size:13px;text-align:center;margin:0 0 32px;">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+      <h1 style="color:#ffffff;font-size:28px;font-weight:300;text-align:center;margin:0 0 8px;">${safeName}, here is your Invisible Rule.</h1>
+      <p style="color:#64748b;font-size:13px;text-align:center;margin:0 0 32px;">${escapeHtml(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }))}</p>
 
       ${bop ? `
       <div style="background:linear-gradient(135deg,rgba(245,158,11,0.09),rgba(180,83,9,0.06));border:1px solid rgba(245,158,11,0.3);border-radius:16px;padding:32px;text-align:center;margin-bottom:24px;">
         <p style="color:#f59e0b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.15em;margin:0 0 16px;">Your Invisible Rule</p>
-        <p style="color:#ffffff;font-size:18px;line-height:1.6;font-style:italic;margin:0;">&ldquo;${bop}&rdquo;</p>
+        <p style="color:#ffffff;font-size:18px;line-height:1.6;font-style:italic;margin:0;">&ldquo;${escapeHtml(bop)}&rdquo;</p>
       </div>` : ''}
 
       ${context ? section('Context', context) : ''}
@@ -102,7 +158,7 @@ export async function POST(req: NextRequest) {
       const { data, error } = await resend.emails.send({
         from: fromAddress,
         to: email,
-        subject: `${name}, your Invisible Rule is here`,
+        subject: safeHeader(`${nameForHeader}, your Invisible Rule is here`, 200),
         html,
       });
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -137,9 +193,9 @@ export async function POST(req: NextRequest) {
     .join('');
 
   const assetLinks: string[] = [];
-  if (videoUrl) assetLinks.push(`<a href="${videoUrl}" style="color:#f59e0b;text-decoration:none;font-weight:600;">Watch your personalized video</a>`);
-  if (audioUrl) assetLinks.push(`<a href="${audioUrl}" style="color:#f59e0b;text-decoration:none;font-weight:600;">Listen to your podcast</a>`);
-  if (slidesUrl) assetLinks.push(`<a href="${slidesUrl}" style="color:#f59e0b;text-decoration:none;font-weight:600;">View your slides</a>`);
+  if (videoUrl) assetLinks.push(`<a href="${safeUrl(videoUrl)}" style="color:#f59e0b;text-decoration:none;font-weight:600;">Watch your personalized video</a>`);
+  if (audioUrl) assetLinks.push(`<a href="${safeUrl(audioUrl)}" style="color:#f59e0b;text-decoration:none;font-weight:600;">Listen to your podcast</a>`);
+  if (slidesUrl) assetLinks.push(`<a href="${safeUrl(slidesUrl)}" style="color:#f59e0b;text-decoration:none;font-weight:600;">View your slides</a>`);
 
   const assetsBlock = assetLinks.length ? `
     <div style="background:linear-gradient(135deg,rgba(245,158,11,0.09),rgba(180,83,9,0.06));border:1px solid rgba(245,158,11,0.3);border-radius:16px;padding:24px;margin-bottom:24px;">
@@ -152,13 +208,13 @@ export async function POST(req: NextRequest) {
 
   const html = wrap(`
     ${header('The Deep Dive')}
-    <h1 style="color:#ffffff;font-size:28px;font-weight:300;text-align:center;margin:0 0 8px;">${name}, here is your Deep Dive.</h1>
-    <p style="color:#64748b;font-size:13px;text-align:center;margin:0 0 32px;">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} &middot; The Deep Dive</p>
+    <h1 style="color:#ffffff;font-size:28px;font-weight:300;text-align:center;margin:0 0 8px;">${safeName}, here is your Deep Dive.</h1>
+    <p style="color:#64748b;font-size:13px;text-align:center;margin:0 0 32px;">${escapeHtml(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }))} &middot; The Deep Dive</p>
 
     ${bopStatement ? `
     <div style="background:linear-gradient(135deg,rgba(245,158,11,0.09),rgba(180,83,9,0.06));border:1px solid rgba(245,158,11,0.3);border-radius:16px;padding:32px;text-align:center;margin-bottom:24px;">
       <p style="color:#f59e0b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.15em;margin:0 0 16px;">Your Invisible Rule</p>
-      <p style="color:#ffffff;font-size:18px;line-height:1.6;font-style:italic;margin:0;">&ldquo;${bopStatement}&rdquo;</p>
+      <p style="color:#ffffff;font-size:18px;line-height:1.6;font-style:italic;margin:0;">&ldquo;${escapeHtml(bopStatement)}&rdquo;</p>
     </div>` : ''}
 
     ${assetsBlock}
@@ -170,7 +226,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await resend.emails.send({
       from: fromAddress,
       to: email,
-      subject: `${name}, your Deep Dive is ready`,
+      subject: safeHeader(`${nameForHeader}, your Deep Dive is ready`, 200),
       html,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
