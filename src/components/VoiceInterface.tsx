@@ -937,14 +937,23 @@ export default function VoiceInterface() {
                             </p>
                         </form>
 
-                        <button
-                            onClick={() => setShowEarlyCapture(false)}
-                            className="absolute top-4 right-4 text-slate-500 hover:text-slate-300"
-                        >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        {/* Only show close (X) DURING an active call so the user
+                            can hide it and get back to voice; after the call
+                            has ended and we still don't have their email, the
+                            user has to submit the form or they will never see
+                            their report. Removing the escape hatch prevents
+                            the "Beautiful work" dead-end. */}
+                        {callState !== 'ended' && (
+                          <button
+                              onClick={() => setShowEarlyCapture(false)}
+                              className="absolute top-4 right-4 text-slate-500 hover:text-slate-300"
+                              aria-label="Close"
+                          >
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                          </button>
+                        )}
                     </div>
                 </div>
             )}
