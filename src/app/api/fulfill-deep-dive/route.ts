@@ -227,22 +227,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing report and no stored session found' }, { status: 400 });
     }
 
-    // If the report we have is a First Light shape (lacks the 12-section
-    // Deep Dive keys), regenerate it as a Deep Dive that EXPANDS the First
-    // Light Invisible Rule.
-    const looksLikeFirstLight = !report.fullBopHypothesis && !!report.invisibleRule;
-    if (sessionState && looksLikeFirstLight) {
+    // The Deep Dive email template renders 12 Version B keys. If any are
+    // missing, regenerate as Deep Dive (tier 2) anchored to the First
+    // Light Invisible Rule so the same statement carries through.
+    // We check the two most-signal keys — if either is missing we treat
+    // the report as needing regen. This catches:
+    //  - First Light shape (has invisibleRule, missing everything else)
+    //  - Version A shape (has bopStatement/evidenceSection, missing V-B keys)
+    //  - Any partial/malformed Version B response
+    const hasFullDeepDive = !!report.fullBopHypothesis && !!report.originContext;
+    if (sessionState && !hasFullDeepDive) {
       try {
+        // Choose the best anchor we have so regen can lock onto it
+        const anchorInvisibleRule =
+          report.invisibleRule ||
+          report.fullBopHypothesis ||
+          report.bopStatement ||
+          '';
+        const anchorInsight = report.coreInsight || '';
         const regenRes = await fetchWithTimeout(`${appUrl()}/api/generate-report`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sessionState,
             tier: 2,
-            firstLightAnchor: {
-              invisibleRule: report.invisibleRule,
-              coreInsight: report.coreInsight,
-            },
+            firstLightAnchor: anchorInvisibleRule
+              ? { invisibleRule: anchorInvisibleRule, coreInsight: anchorInsight }
+              : undefined,
           }),
         }, 240_000); // 4 minutes — Deep Dive prompt + Anthropic can take a while
         if (regenRes && regenRes.ok) {
@@ -262,19 +273,48 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Last-resort defense: if regeneration did not happen (or failed silently)
-    // and we still only have a First Light report, copy First Light content
-    // into the Deep Dive Version B keys so the email is never empty.
-    if (!report.fullBopHypothesis && report.invisibleRule) {
-      console.warn('Falling back to First Light content for Deep Dive email');
-      const fl = report.invisibleRule;
-      const insight = report.coreInsight || '';
-      report.fullBopHypothesis = fl;
-      report.bopStatement = report.bopStatement || fl;
-      report.originContext = report.originContext || insight;
-      report.payoffAndCost = report.payoffAndCost || insight;
-      report.newOperatingPrinciple = report.newOperatingPrinciple || insight;
-      report.integrationAndIdentity = report.integrationAndIdentity || insight;
+    // Last-resort defense: after regen attempt, if the Deep Dive Version B
+    // keys are STILL missing, synthesize them from whatever content we
+    // have (First Light invisibleRule/coreInsight, OR Version A bopStatement/
+    // evidenceSection/etc). Guarantees the email is never empty regardless
+    // of what shape the stored report was in.
+    if (!report.fullBopHypothesis || !report.originContext) {
+      console.warn('Falling back to available content for Deep Dive email');
+      const bop =
+        report.fullBopHypothesis ||
+        report.invisibleRule ||
+        report.bopStatement ||
+        '';
+      const context =
+        report.originContext ||
+        report.evidenceSection ||
+        report.coreInsight ||
+        '';
+      const protectedContent =
+        report.payoffAndCost ||
+        report.whatItProtected ||
+        '';
+      const evolvedContent =
+        report.newOperatingPrinciple ||
+        report.evolvedPrinciple ||
+        '';
+      const nextStepsContent =
+        report.thirtyDayPlan ||
+        report.nextSteps ||
+        '';
+      const tolerationsContent =
+        report.tolerationsMapped ||
+        report.tolerationsSummary ||
+        '';
+
+      report.fullBopHypothesis = report.fullBopHypothesis || bop;
+      report.bopStatement = report.bopStatement || bop;
+      report.originContext = report.originContext || context;
+      report.tolerationsMapped = report.tolerationsMapped || tolerationsContent;
+      report.payoffAndCost = report.payoffAndCost || protectedContent;
+      report.newOperatingPrinciple = report.newOperatingPrinciple || evolvedContent;
+      report.thirtyDayPlan = report.thirtyDayPlan || nextStepsContent;
+      report.integrationAndIdentity = report.integrationAndIdentity || evolvedContent;
     }
 
     const [audioUrl, videoRenderId, slidesUrl] = await Promise.all([
