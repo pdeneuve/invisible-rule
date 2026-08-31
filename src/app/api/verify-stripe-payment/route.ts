@@ -55,21 +55,37 @@ export async function POST(req: NextRequest) {
       console.warn('INTERNAL_FULFILL_SECRET not set — cannot trigger Deep Dive fulfillment');
       return NextResponse.json({ verified: true, fulfilled: false, error: 'Server fulfillment not configured' }, { status: 200 });
     }
-    try {
-      fetch(`${baseUrl}/api/fulfill-deep-dive`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName,
-          email,
-          report: report || {},
-          sessionState: sessionState || null,
-          internalSecret,
-        }),
-      });
-    } catch (err) {
-      console.error('Triggering fulfill-deep-dive failed:', err);
-    }
+
+    // AWAIT the fulfill request head so we KNOW it landed on Vercel's edge
+    // before we return. Previous code did fire-and-forget without await,
+    // which meant the caller could terminate before the TCP connection
+    // opened -- paid customer's fulfillment never started.
+    //
+    // We don't await the FULL response (that's a 2-5 minute pipeline).
+    // We race the fetch against a 5-second cutoff: whichever finishes
+    // first, we return. Fulfill-deep-dive has its own 5-minute Vercel
+    // budget so it keeps running even after we return.
+    const fulfillPromise = fetch(`${baseUrl}/api/fulfill-deep-dive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        firstName,
+        email,
+        report: report || {},
+        sessionState: sessionState || null,
+        internalSecret,
+      }),
+    }).catch((err) => {
+      console.error('fulfill-deep-dive kick failed:', err);
+      return null;
+    });
+
+    // Race: give the request at least 5s to reach Vercel's edge, then return.
+    await Promise.race([
+      fulfillPromise,
+      new Promise((resolve) => setTimeout(resolve, 5000)),
+    ]);
+
     return NextResponse.json({ verified: true, fulfilled: true, tier, email, firstName });
   }
 
