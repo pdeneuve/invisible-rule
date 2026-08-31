@@ -10,19 +10,31 @@ interface Result {
 }
 
 export default function StripeSetupPage() {
+  const [secret, setSecret] = useState('');
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<Result[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const run = async () => {
+    if (!secret.trim()) {
+      setError('Enter the admin secret first (INTERNAL_FULFILL_SECRET from Vercel env).');
+      return;
+    }
     setRunning(true);
     setError(null);
     setResults(null);
     try {
-      const res = await fetch('/api/setup-stripe-coupons', { method: 'POST' });
+      const res = await fetch('/api/setup-stripe-coupons', {
+        method: 'POST',
+        headers: { 'X-Admin-Secret': secret.trim() },
+      });
       const json = await res.json();
       if (!res.ok) {
-        setError(json?.error || `Server returned ${res.status}`);
+        if (res.status === 401) {
+          setError('Wrong admin secret. Get the correct value from Vercel → Settings → Environment Variables → INTERNAL_FULFILL_SECRET.');
+        } else {
+          setError(json?.error || `Server returned ${res.status}`);
+        }
       } else {
         setResults(json.results || []);
       }
@@ -59,6 +71,18 @@ export default function StripeSetupPage() {
           <li>• <span className="font-mono text-amber-300">TESTIMONIAL2026</span> — People asked for a testimonial</li>
           <li>• <span className="font-mono text-amber-300">VIPACCESS</span> — Special guests / VIPs</li>
         </ul>
+
+        <label className="block text-slate-400 text-xs uppercase tracking-wider mb-2">
+          Admin secret
+        </label>
+        <input
+          type="password"
+          value={secret}
+          onChange={e => { setSecret(e.target.value); setError(null); }}
+          placeholder="INTERNAL_FULFILL_SECRET from Vercel env"
+          className="w-full mb-6 bg-slate-800 text-white placeholder-slate-500 border border-slate-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+          disabled={running}
+        />
 
         <button
           onClick={run}
