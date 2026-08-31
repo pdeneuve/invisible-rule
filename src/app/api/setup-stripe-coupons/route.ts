@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 /**
  * One-time admin endpoint to create the four Invisible Rule coupons in
@@ -6,6 +7,10 @@ import { NextRequest, NextResponse } from 'next/server';
  *
  * Idempotent: if a coupon or promotion code already exists, the existing
  * one is left alone and reported as "exists".
+ *
+ * Auth: requires INTERNAL_FULFILL_SECRET as X-Admin-Secret header OR
+ * ?secret= query param. Prevents crawlers or attackers from spamming
+ * Stripe API calls on the account.
  */
 
 const COUPONS = [
@@ -14,6 +19,27 @@ const COUPONS = [
   { id: 'TESTIMONIAL2026', code: 'TESTIMONIAL2026', name: 'Testimonial 2026 — Free' },
   { id: 'VIPACCESS',       code: 'VIPACCESS',       name: 'VIP Access — Free' },
 ];
+
+/** Constant-time compare so timing attacks cannot leak the secret. */
+function secretMatches(provided: string, expected: string): boolean {
+  if (!provided || !expected) return false;
+  if (provided.length !== expected.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+
+function isAuthorizedAdmin(req: NextRequest): boolean {
+  const expected = process.env.INTERNAL_FULFILL_SECRET || '';
+  if (!expected) return false;
+  const header = req.headers.get('x-admin-secret') || '';
+  if (secretMatches(header, expected)) return true;
+  const qp = new URL(req.url).searchParams.get('secret') || '';
+  if (secretMatches(qp, expected)) return true;
+  return false;
+}
 
 async function stripeForm(path: string, key: string, body: URLSearchParams) {
   const res = await fetch(`https://api.stripe.com/v1${path}`, {
@@ -28,7 +54,7 @@ async function stripeForm(path: string, key: string, body: URLSearchParams) {
   return { ok: res.ok, status: res.status, json };
 }
 
-export async function POST() {
+async function runSetup(): Promise<NextResponse> {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) {
     return NextResponse.json(
@@ -92,8 +118,16 @@ export async function POST() {
   return NextResponse.json({ results });
 }
 
+export async function POST(req: NextRequest) {
+  if (!isAuthorizedAdmin(req)) {
+    return NextResponse.json({ error: 'Unauthorized. Provide admin secret.' }, { status: 401 });
+  }
+  return runSetup();
+}
+
 export async function GET(req: NextRequest) {
-  // Convenience: allow GET so user can hit the URL from a button.
-  void req;
-  return POST();
+  if (!isAuthorizedAdmin(req)) {
+    return NextResponse.json({ error: 'Unauthorized. Provide admin secret.' }, { status: 401 });
+  }
+  return runSetup();
 }
