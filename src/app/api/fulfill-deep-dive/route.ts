@@ -26,13 +26,21 @@ interface FulfillRequestBody {
 
 const VALID_COUPONS = ['DEEPDIVEGIFT', 'CLIENT2026', 'TESTIMONIAL2026', 'VIPACCESS'];
 
-function isAuthorized(body: FulfillRequestBody): boolean {
+/**
+ * Sync auth check — passes if EITHER a valid internal secret OR a valid
+ * free token is provided. Coupon-based auth requires a stored session
+ * lookup, so it is handled separately (async) inside POST.
+ */
+function isInternallyAuthorized(body: FulfillRequestBody): boolean {
   const freeToken = process.env.FREE_DEEP_DIVE_TOKEN || '';
   const internalSecret = process.env.INTERNAL_FULFILL_SECRET || '';
   if (internalSecret && body.internalSecret === internalSecret) return true;
   if (freeToken && body.freeToken === freeToken) return true;
-  if (body.coupon && VALID_COUPONS.includes(body.coupon.toUpperCase())) return true;
   return false;
+}
+
+function normalizedCoupon(raw: string | undefined): string {
+  return String(raw ?? '').trim().toUpperCase();
 }
 
 function appUrl(): string {
@@ -198,12 +206,44 @@ export async function POST(req: NextRequest) {
     const { firstName, email } = body;
     let report = body.report;
 
-    if (!isAuthorized(body)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     if (!email) {
       return NextResponse.json({ error: 'Missing email' }, { status: 400 });
+    }
+
+    // ── Auth ────────────────────────────────────────────────────────
+    // Path 1: internal secret / free token (already valid — trusted callers)
+    let authorized = isInternallyAuthorized(body);
+    let couponUsed = '';
+
+    // Path 2: coupon. This is what attackers try to abuse. To prove the
+    // caller isn't just spraying our coupon at random emails, we require
+    // that a voice session has already been stored on our server for
+    // that email. Legitimate users always have this because
+    // save-session runs at the end of every voice session; random
+    // attackers with only a coupon and someone else's email cannot
+    // clear this bar.
+    let storedForAuth: Awaited<ReturnType<typeof getSession>> = null;
+    if (!authorized) {
+      const c = normalizedCoupon(body.coupon);
+      if (c && VALID_COUPONS.includes(c)) {
+        storedForAuth = await getSession(email);
+        if (storedForAuth) {
+          authorized = true;
+          couponUsed = c;
+        } else {
+          return NextResponse.json(
+            {
+              error: 'Coupon requires a completed voice session for this email.',
+              hint: 'Complete a voice session with this email address first.',
+            },
+            { status: 401 }
+          );
+        }
+      }
+    }
+
+    if (!authorized) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Server-side recovery: if the browser dropped the report or session
@@ -211,7 +251,8 @@ export async function POST(req: NextRequest) {
     // up by email from our server store and use that as the source of truth.
     let sessionState = body.sessionState;
     if (!report || Object.keys(report).length === 0 || !sessionState) {
-      const stored = await getSession(email);
+      // Reuse the storedForAuth lookup if we already made it above.
+      const stored = storedForAuth ?? (await getSession(email));
       if (stored) {
         if (!report || Object.keys(report).length === 0) {
           report = (stored.report as Record<string, string>) || {};
@@ -334,6 +375,7 @@ export async function POST(req: NextRequest) {
       videoStatusUrl,
       slidesUrl,
       emailed,
+      couponUsed: couponUsed || undefined,
     });
   } catch (err) {
     console.error('fulfill-deep-dive error:', err);
